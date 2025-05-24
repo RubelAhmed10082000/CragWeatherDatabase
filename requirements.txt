@@ -1,0 +1,19 @@
+pandas
+numpy
+duckdb
+openmeteo-requests
+requests-cache
+retry-requests
+json
+pandas as pd
+ast
+os
+numpy as np
+openmeteo_requests
+retry_requests 
+time
+duckdb
+datetime
+apache-airflow
+great_expectations
+
