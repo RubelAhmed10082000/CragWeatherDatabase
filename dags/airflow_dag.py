@@ -1,8 +1,8 @@
 from airflow import DAG
-from main import extract, transform, clean, fetch_weather_data, clean_weather_data, load
 from datetime import datetime, timedelta
 from airflow.operators.python import PythonOperator
-import pandas 
+import pandas as pd
+from functions import extract, transform, clean, fetch_weather_data, clean_weather_data, load
 
 # Creating default arguments
 default_args = {
