@@ -6,6 +6,7 @@ The goal is to allow climbers to plan their outdoor climbing trips by filtering 
 **How It's Made:**
 
 Tech used: 
+
 Python, SQL, DUCKDB, Pandas, Openmeteo-Requests, Docker, Airflow, Great-Expectations, Numpy, Dateutil
 
 Data flow:
