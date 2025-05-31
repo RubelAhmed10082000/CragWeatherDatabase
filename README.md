@@ -4,6 +4,7 @@ I created a data pipeline that ingests both rock climbing location data and 7 da
 The goal is to allow climbers to plan their outdoor climbing trips by filtering which locations have the best weather for climbing
 
 **How It's Made:**
+
 Tech used: 
 Python, SQL, DUCKDB, Pandas, Openmeteo-Requests, Docker, Airflow, Great-Expectations, Numpy, Dateutil
 
