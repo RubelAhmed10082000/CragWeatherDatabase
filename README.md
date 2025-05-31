@@ -39,13 +39,13 @@ Docker - Setting up a working Docker enviroment was also challenging due to its 
 
 **To Do**:
 
-Great-Expectations: Need to create Great-Expectation validation suite and intergrate validation checkpoints into my Airflow DAG
+Great-Expectations - Need to create Great-Expectation validation suite and intergrate validation checkpoints into my Airflow DAG
 
 **Next Steps**:
 
-FastAPI: I plan on learning FastAPI and Pydantic to be able create a frontend to display the locations and weather data to an end-user
+FastAPI - I plan on learning FastAPI and Pydantic to be able create a frontend to display the locations and weather data to an end-user
 
-Scaling Up: I want to scale up my pipeline by adding climbing locations from other countries. However, this may require SPARK as well as a cloud based data warehouse. 
+Scaling Up - I want to scale up my pipeline by adding climbing locations from other countries. However, this may require SPARK as well as a cloud based data warehouse. 
 
 
 
