@@ -40,6 +40,7 @@ Docker - Setting up a working Docker enviroment was also challenging due to its 
 **To Do**:
 
 Great-Expectations - Need to create Great-Expectation validation suite and intergrate validation checkpoints into my Airflow DAG
+Pytest - Run unit tests
 
 **Next Steps**:
 
