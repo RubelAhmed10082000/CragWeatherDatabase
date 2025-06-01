@@ -1,8 +1,0 @@
-duckdb
-openmeteo-requests
-requests-cache
-retry-requests
-pandas
-apache-airflow
-great_expectations
-
