@@ -1,5 +1,5 @@
 
-def run_expectations(crag_df, cleaned_weather_df):
+def run_expectations():
     """
     This function runs the expectations for the weather and crag datasets.
     It checks for the following:
@@ -21,22 +21,8 @@ def run_expectations(crag_df, cleaned_weather_df):
 
 
     # Importing the data into Great Expectations
-    cleaned_weather_df = pd.read_csv('Working_Code/cleaned_weather_df.csv', index_col=[0], parse_dates=['date'])
-    crag_df = pd.read_csv('Working_Code/crag_df.csv', index_col=[0])
-
-    # Setting data types for crag DataFrame
-    crag_df['sector_name'] = crag_df['sector_name'].astype('string')
-    crag_df['crag_name'] = crag_df['crag_name'].astype('string')
-    crag_df['county'] = crag_df['county'].astype('string')
-    crag_df['country'] = crag_df['country'].astype('string')
-    crag_df['rocktype'] = crag_df['rocktype'].astype('category')
-    crag_df['latitude'] = crag_df['latitude'].astype('float64')
-    crag_df['longitude'] = crag_df['longitude'].astype('float64')
-    crag_df['routes_count'] = crag_df['routes_count'].astype('int64')
-    crag_df['route_name'] = crag_df['route_name'].astype('string')
-    crag_df['type'] = crag_df['type'].astype('category')
-    crag_df['difficulty_grade'] = crag_df['difficulty_grade'].astype('string')
-    crag_df['safety_grade'] = crag_df['safety_grade'].astype('category')
+    cleaned_weather_df = pd.read_parquet('Working_Code/cleaned_weather_df.parquet')
+    crag_df = pd.read_parquet('Working_Code/crag_df.parquet')
 
     # Creating data context
     context = gx.get_context()
@@ -111,11 +97,11 @@ def run_expectations(crag_df, cleaned_weather_df):
 
     type_expectations_weather_date = gx.expectations.ExpectColumnValuesToBeOfType(column='date', type_="Timestamp") 
 
-    type_expectations_weather_temperature = gx.expectations.ExpectColumnValuesToBeOfType(column='temperature_c', type_="float64") 
+    type_expectations_weather_temperature = gx.expectations.ExpectColumnValuesToBeOfType(column='temperature_c', type_="float32") 
 
-    type_expectations_weather_humidity = gx.expectations.ExpectColumnValuesToBeOfType(column='relative_humidity_percentage', type_="float64") 
+    type_expectations_weather_humidity = gx.expectations.ExpectColumnValuesToBeOfType(column='relative_humidity_percentage', type_="float32") 
 
-    type_expectations_weather_precipitation = gx.expectations.ExpectColumnValuesToBeOfType(column='precipitation_percentage', type_="float64") 
+    type_expectations_weather_precipitation = gx.expectations.ExpectColumnValuesToBeOfType(column='precipitation_percentage', type_="float32") 
 
     type_expectations_weather_longitude = gx.expectations.ExpectColumnValuesToBeOfType(column='longitude', type_="float64") 
 
@@ -195,7 +181,12 @@ def run_expectations(crag_df, cleaned_weather_df):
     crag_validation_results = crag_validation.run(
         batch_parameters={"dataframe":crag_df}
     )
+    # Save the validation results to JSON files
+    with open('Working_Code/weather_validation_results.json', 'w') as f:
+        json.dump(weather_validation_results.to_json_dict(), f, indent=4) 
+    with open('Working_Code/crag_validation_results.json', 'w') as f:
+        json.dump(crag_validation_results.to_json_dict(), f, indent=4)  
     return weather_validation_results, crag_validation_results
 
-
+run_expectations()
 

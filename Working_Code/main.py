@@ -149,7 +149,7 @@ def clean(transformed_data):
         crag_df[['longitude','latitude']] = crag_df[['longitude','latitude']].dropna()
         
         # Exporting function result to .csv
-        crag_df.to_csv('crag_df.csv')
+        crag_df.to_parquet('crag_df.parquet', index=None)
         print(f"file successfully cleaned. Dataframe has {crag_df.shape}")
         return crag_df
     except Exception as e:
@@ -257,7 +257,7 @@ def clean_weather_data(weather_df):
     """
     try:
         cleaned_weather_df = weather_df.rename(columns = {'temperature_2m':'temperature_c','relative_humidity_2m':'relative_humidity_percentage','precipitation':'precipitation_percentage'})
-        cleaned_weather_df.to_csv('cleaned_weather_df.csv')
+        cleaned_weather_df.to_parquet('cleaned_weather_df.parquet', index=None)
         print("Cleaning was successful")
         return cleaned_weather_df
     except Exception as e:
@@ -459,3 +459,9 @@ def load (crag_df, cleaned_weather_df):
     finally:
         con.close()   
 
+
+extracted_df = extract('all_crags.json')
+transformed_df = transform(extracted_df)    
+crag_df = clean(transformed_df)
+weather_df = fetch_weather_data(crag_df)
+cleaned_weather_df = clean_weather_data(weather_df)

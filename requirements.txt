@@ -4,6 +4,8 @@ requests-cache
 retry-requests
 pandas
 apache-airflow
-great_expectations
+great_expectations==1.4.6
 pytest
 airflow-provider-great-expectations
+fastparquet
+pyarrow
