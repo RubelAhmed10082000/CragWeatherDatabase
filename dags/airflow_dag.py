@@ -35,7 +35,7 @@ with DAG(
         crag_df = clean(transformed_df)
 
         # Extracts weather data via API call
-        weather_df = fetch_weather_data()
+        weather_df = fetch_weather_data(crag_df)
 
         # Cleans weather data
         cleaned_weather_df = clean_weather_data(weather_df)
