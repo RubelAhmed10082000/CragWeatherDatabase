@@ -195,5 +195,5 @@ def run_expectations():
     else:
         print("All validations passed.")
 
-run_expectations()
+
 
