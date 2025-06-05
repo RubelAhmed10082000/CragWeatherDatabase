@@ -29,7 +29,7 @@ Both climbing and weather dataframes were used ingested into a DUCKDB in-memory 
 
 I used created a simple Airflow DAG to run the entire pipeline automatically everyday at 1am. Docker was used to create a virtual enviroment for my which both my DAG and my pipeline will run
 
-Great-Expectations is currently being worked on, this will validation both the schema as well as column datatypes for both the climbing and weather database before being ingested into DUCKDB. The validation will then be intergrated into the Airflow DAG
+Great-Expectations was used to validate the data, ensuring tables had the correct shape and each column had the correct naming convention and data type
 
 **Lessons Learned / Challenges:**
 
@@ -37,9 +37,10 @@ Webscraping - I tried to webscrape the data myself but ultimately failed. I beli
 
 Docker - Setting up a working Docker enviroment was also challenging due to its depth, complexity and the need to understand file structures. It took me a lot of trial and error to get the Docker container, and by extension an Airflow DAG, working
 
+Validation - Great Expectations was challenging to use as it is hard to intergrate and very bloated. For example, I needed to add an expectations to my suite one by one. Moreover, I found it hard to create a simple print message which showed the failed expectations. I was unable to use Data Docs due to security restrictions on my laptop
+
 **To Do**:
 
-Great-Expectations - Need to create Great-Expectation validation suite and intergrate validation checkpoints into my Airflow DAG
 Pytest - Run unit tests
 
 **Next Steps**:
@@ -47,6 +48,10 @@ Pytest - Run unit tests
 FastAPI - I plan on learning FastAPI and Pydantic to be able create a frontend to display the locations and weather data to an end-user
 
 Scaling Up - I want to scale up my pipeline by adding climbing locations from other countries. However, this may require SPARK as well as a cloud based data warehouse
+
+DBT - Just learning data modelling and how to use DBT, eager to apply skills to this project
+
+Pytest - I only know the basics of unit testing so I look forward on iterating on the tests I've already made
 
 
 
