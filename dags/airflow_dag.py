@@ -2,7 +2,8 @@ from airflow import DAG
 from datetime import datetime, timedelta
 from airflow.operators.python import PythonOperator
 import pandas as pd
-from functions import extract, transform, clean, fetch_weather_data, clean_weather_data, load
+from main import extract, transform, clean, fetch_weather_data, clean_weather_data, load
+from expectations import run_expectations
 
 # Creating default arguments
 default_args = {
@@ -40,6 +41,9 @@ with DAG(
         # Cleans weather data
         cleaned_weather_df = clean_weather_data(weather_df)
 
+        # Running expectations on both datasets
+        run_expectations()
+
         # Loading everything to DuckDB
         load(crag_df, cleaned_weather_df)
 
@@ -47,3 +51,5 @@ with DAG(
         task_id='run_etl_pipeline',
         python_callable=run_crag_pipeline
     )
+
+etl_task 

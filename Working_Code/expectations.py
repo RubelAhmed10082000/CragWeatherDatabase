@@ -174,19 +174,26 @@ def run_expectations():
         suite=weather_suite
     )
 
-    weather_validation_results = weather_validation.run(
+    weather_result = weather_validation.run(
         batch_parameters={"dataframe":cleaned_weather_df}
     )
 
-    crag_validation_results = crag_validation.run(
+    crag_result = crag_validation.run(
         batch_parameters={"dataframe":crag_df}
     )
     # Save the validation results to JSON files
     with open('Working_Code/weather_validation_results.json', 'w') as f:
-        json.dump(weather_validation_results.to_json_dict(), f, indent=4) 
+        json.dump(weather_result.to_json_dict(), f, indent=4) 
     with open('Working_Code/crag_validation_results.json', 'w') as f:
-        json.dump(crag_validation_results.to_json_dict(), f, indent=4)  
-    return weather_validation_results, crag_validation_results
+        json.dump(crag_result.to_json_dict(), f, indent=4)  
+
+    # Check for failures and open if needed
+    if not weather_result.success:
+        print(" One or more validations failed. Please check weather_validation_results for more details.")
+    elif not crag_result.success:
+        print(" One or more validations failed. Please check crag_validation_results for more details.")
+    else:
+        print("All validations passed.")
 
 run_expectations()
 
