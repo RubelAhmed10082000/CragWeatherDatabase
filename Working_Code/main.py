@@ -10,6 +10,7 @@ import requests_cache
 import duckdb
 from datetime import datetime 
 from time import sleep
+from expectations import run_expectations
 
 def extract(raw_data):
     """
@@ -465,3 +466,5 @@ transformed_df = transform(extracted_df)
 crag_df = clean(transformed_df)
 weather_df = fetch_weather_data(crag_df)
 cleaned_weather_df = clean_weather_data(weather_df)
+run_expectations()
+load(crag_df, cleaned_weather_df)
