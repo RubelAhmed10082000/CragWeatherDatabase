@@ -461,13 +461,5 @@ def load (crag_df, cleaned_weather_df):
         con.close()   
 
 
-#extracted_df = extract('all_crags.json')
-#transformed_df = transform(extracted_df)    
-#crag_df = clean(transformed_df)
-#weather_df = fetch_weather_data(crag_df)
-#cleaned_weather_df = clean_weather_data(weather_df)
-#run_expectations()
-#load(crag_df, cleaned_weather_df)
 
-cleaned_weather_df = pd.read_parquet('cleaned_weather_df.parquet')
-print(cleaned_weather_df.dtypes)
+
