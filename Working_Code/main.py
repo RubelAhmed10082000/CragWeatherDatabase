@@ -139,7 +139,7 @@ def clean(transformed_data):
        
         # Creating both 'difficulty_grade' and 'safety_grade' columns
         crag_df['difficulty_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[1] if isinstance(x, str) and ' ' in x else x).astype('string')
-        crag_df['safety_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[0] if isinstance(x, str) and ' ' in x else np.nan).astype('category')
+        crag_df['safety_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[0] if isinstance(x, str) and ' ' in x else np.nan).astype('string')
         
         # Dropping grade column
         crag_df = crag_df.drop(columns=['grade'])
@@ -302,6 +302,7 @@ def load (crag_df, cleaned_weather_df):
             'Alpine',
             'Via Ferrata'
             );
+                
         
             CREATE TYPE rocktype AS ENUM (
             'Gritstone',
@@ -458,8 +459,13 @@ def load (crag_df, cleaned_weather_df):
         return None
     
     finally:
-        con.close()   
+        con.close()
+        print("Connection to DuckDB closed.")   
 
-
-
+crag_df = pd.read_parquet('crag_df.parquet')
+max_routes = crag_df['routes_count'].max()
+crag_with_max_routes = crag_df[crag_df['routes_count'] == max_routes]
+crag_with_max_routes.to_csv('crag_with_max_routes.csv', index=False)
+#cleaned_weather_df = pd.read_parquet('cleaned_weather_df.parquet')
+#print(cleaned_weather_df.shape)
 
