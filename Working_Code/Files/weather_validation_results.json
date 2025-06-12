@@ -1,0 +1,251 @@
+{
+    "success": true,
+    "results": [
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_table_column_count_to_equal",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "value": 6
+                },
+                "meta": {},
+                "id": "39b3f0bb-15ef-49e1-a324-1d05d2e1c7da"
+            },
+            "result": {
+                "observed_value": 6
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_table_row_count_to_equal",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "value": 8400
+                },
+                "meta": {},
+                "id": "527f4a50-5309-4ec5-b75a-7c1ae1d473b4"
+            },
+            "result": {
+                "observed_value": 8400
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_table_columns_to_match_set",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column_set": [
+                        "date",
+                        "temperature_c",
+                        "relative_humidity_percentage",
+                        "precipitation_percentage",
+                        "longitude",
+                        "latitude"
+                    ]
+                },
+                "meta": {},
+                "id": "3652474c-868a-4b4c-ab72-d08ca98cb7ec"
+            },
+            "result": {
+                "observed_value": [
+                    "date",
+                    "temperature_c",
+                    "relative_humidity_percentage",
+                    "precipitation_percentage",
+                    "latitude",
+                    "longitude"
+                ]
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column": "date",
+                    "type_": "Timestamp"
+                },
+                "meta": {},
+                "id": "64e1de09-da0c-46a7-be50-fc1ee7867f33"
+            },
+            "result": {
+                "observed_value": "Timestamp"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column": "temperature_c",
+                    "type_": "float32"
+                },
+                "meta": {},
+                "id": "6d9b30a4-1f12-4709-bbab-22b5bb70543a"
+            },
+            "result": {
+                "observed_value": "float32"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column": "relative_humidity_percentage",
+                    "type_": "float32"
+                },
+                "meta": {},
+                "id": "dcd85910-108d-4994-bd9d-246cb4d2e73e"
+            },
+            "result": {
+                "observed_value": "float32"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column": "precipitation_percentage",
+                    "type_": "float32"
+                },
+                "meta": {},
+                "id": "890cd3e7-b21e-40c1-8870-740b88030c2e"
+            },
+            "result": {
+                "observed_value": "float32"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column": "longitude",
+                    "type_": "float64"
+                },
+                "meta": {},
+                "id": "d52168f5-677f-4fb3-a511-027109cf620a"
+            },
+            "result": {
+                "observed_value": "float64"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "cleaned_weather_df-data_asset_weather",
+                    "column": "latitude",
+                    "type_": "float64"
+                },
+                "meta": {},
+                "id": "6b066824-757f-4d33-b514-01f5e8783a71"
+            },
+            "result": {
+                "observed_value": "float64"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        }
+    ],
+    "suite_name": "weather_suite",
+    "suite_parameters": {},
+    "statistics": {
+        "evaluated_expectations": 9,
+        "successful_expectations": 9,
+        "unsuccessful_expectations": 0,
+        "success_percent": 100.0
+    },
+    "meta": {
+        "great_expectations_version": "1.4.6",
+        "batch_spec": {
+            "batch_data": "PandasDataFrame"
+        },
+        "batch_markers": {
+            "ge_load_time": "20250612T130650.252385Z",
+            "pandas_data_fingerprint": "367fb13aa6ed001fe8e74b81b660ae41"
+        },
+        "active_batch_definition": {
+            "datasource_name": "cleaned_weather_df",
+            "data_connector_name": "fluent",
+            "data_asset_name": "data_asset_weather",
+            "batch_identifiers": {
+                "dataframe": "<DATAFRAME>"
+            }
+        },
+        "validation_id": "f6cdf2d1-3b73-4269-9dd3-6d6fe54b84e8",
+        "checkpoint_id": null,
+        "run_id": {
+            "run_name": null,
+            "run_time": "2025-06-12T14:06:50.315237+01:00"
+        },
+        "validation_time": "2025-06-12T13:06:50.315237+00:00",
+        "batch_parameters": {
+            "dataframe": "<DATAFRAME>"
+        }
+    },
+    "id": null
+}
