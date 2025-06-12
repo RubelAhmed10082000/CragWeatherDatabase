@@ -156,7 +156,7 @@ def clean(transformed_data):
     except Exception as e:
         print(f"Cleaning unsuccessful: {e}")
         return None
-    
+### Unique_Cords has been set for head(50) to avoid long API call. For production, this should be removed or set to a higher number.###
 def fetch_weather_data(crag_df):
     """
     Calls Open-Meteo API to create weather_df
@@ -462,10 +462,5 @@ def load (crag_df, cleaned_weather_df):
         con.close()
         print("Connection to DuckDB closed.")   
 
-#extracted_df = extract('Working_Code/all_crags.json')
-#transformed_df = transform(extracted_df)
-#crag_df = clean(transformed_df)
-#weather_df = fetch_weather_data(crag_df)
-#cleaned_weather_df = clean_weather_data(weather_df)
-#run_expectations()
-#load(crag_df, cleaned_weather_df)
+crag_df = pd.read_parquet('Working_Code/Files/crag_df.parquet')
+print(crag_df.dtypes)
