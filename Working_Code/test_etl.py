@@ -16,23 +16,23 @@ from main import extract, transform, clean, fetch_weather_data, clean_weather_da
 
 @pytest.fixture
 def cleaned_weather_df():
-    return pd.read_parquet('Working_Code/cleaned_weather_df.parquet')
+    return pd.read_parquet('Working_Code/Files/cleaned_weather_df.parquet')
     
 @pytest.fixture
 def crag_df():
-    return pd.read_parquet('Working_Code/crag_df.parquet')
+    return pd.read_parquet('Working_Code/Files/crag_df.parquet')
 
 @pytest.fixture
 def extracted_df():
-    return pd.read_parquet('Working_Code/extracted_df.parquet')
+    return pd.read_parquet('Working_Code/Files/extracted_df.parquet')
 
 @pytest.fixture
 def transformed_df():
-    return pd.read_parquet('Working_Code/transformed_df.parquet')
+    return pd.read_parquet('Working_Code/Files/transformed_df.parquet')
 
 @pytest.fixture
 def weather_df():
-    return pd.read_parquet('Working_Code/weather_df.parquet')
+    return pd.read_parquet('Working_Code/Files/weather_df.parquet')
  
 
 def test_transform_output_shape_and_type(crag_df, transformed_df):

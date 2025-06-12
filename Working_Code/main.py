@@ -34,7 +34,7 @@ def extract(raw_data):
     # Normalizing the JSON data into a DataFrame
     try:
         extracted_df = pd.json_normalize(all_crags, record_path=['crags'])
-        extracted_df.to_parquet('extracted_df.parquet', index=None)
+        extracted_df.to_parquet('Working_Code/Files/extracted_df.parquet', index=None)
         print("file successfully turned into a dataframe")
         return extracted_df
     except Exception as E:
@@ -89,7 +89,7 @@ def transform(extracted_data):
         # Rename crag-related columns
         transformed_df = transformed_df.rename(columns={'name': 'crag_name', 'id': 'crag_id'})
     
-        transformed_df.to_parquet('transformed_df.parquet', index=None)
+        transformed_df.to_parquet('Working_Code/Files/transformed_df.parquet', index=None)
         print(f"file successfully normalized. Dataframe has {transformed_df.shape}")
         return transformed_df
         
@@ -150,7 +150,7 @@ def clean(transformed_data):
         crag_df[['longitude','latitude']] = crag_df[['longitude','latitude']].dropna()
         
         # Exporting function result to .csv
-        crag_df.to_parquet('crag_df.parquet', index=None)
+        crag_df.to_parquet('Working_Code/Files/crag_df.parquet', index=None)
         print(f"file successfully cleaned. Dataframe has {crag_df.shape}")
         return crag_df
     except Exception as e:
@@ -233,7 +233,7 @@ def fetch_weather_data(crag_df):
 
         # Concatenate all weather dataframes into one
         weather_df = pd.concat(weather_results).reset_index(drop=True)
-        weather_df.to_parquet('weather_df.parquet', index=None)
+        weather_df.to_parquet('Working_Code/Files/weather_df.parquet', index=None)
         print(f"API Call was successful.{weather_df.shape}")
         return weather_df
 
@@ -258,7 +258,7 @@ def clean_weather_data(weather_df):
     """
     try:
         cleaned_weather_df = weather_df.rename(columns = {'temperature_2m':'temperature_c','relative_humidity_2m':'relative_humidity_percentage','precipitation':'precipitation_percentage'})
-        cleaned_weather_df.to_parquet('cleaned_weather_df.parquet', index=None)
+        cleaned_weather_df.to_parquet('Working_Code/Files/cleaned_weather_df.parquet', index=None)
         print("Cleaning was successful")
         return cleaned_weather_df
     except Exception as e:
@@ -462,10 +462,10 @@ def load (crag_df, cleaned_weather_df):
         con.close()
         print("Connection to DuckDB closed.")   
 
-crag_df = pd.read_parquet('crag_df.parquet')
-max_routes = crag_df['routes_count'].max()
-crag_with_max_routes = crag_df[crag_df['routes_count'] == max_routes]
-crag_with_max_routes.to_csv('crag_with_max_routes.csv', index=False)
-#cleaned_weather_df = pd.read_parquet('cleaned_weather_df.parquet')
-#print(cleaned_weather_df.shape)
-
+#extracted_df = extract('Working_Code/all_crags.json')
+#transformed_df = transform(extracted_df)
+#crag_df = clean(transformed_df)
+#weather_df = fetch_weather_data(crag_df)
+#cleaned_weather_df = clean_weather_data(weather_df)
+#run_expectations()
+#load(crag_df, cleaned_weather_df)
