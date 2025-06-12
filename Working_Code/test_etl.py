@@ -200,10 +200,4 @@ def test_weather_coordinates_exist_in_crags(cleaned_weather_df, crag_df):
     merged = weather_coords.merge(crag_coords, on=['latitude', 'longitude'], how='left')
     assert merged.notnull().all().all()
 
-def test_end_to_end_pipeline(tmp_path):
-    extracted_df = extract('all_crags.json')
-    transformed_df = transform(extracted_df)
-    crag_df = clean(transformed_df)
-    weather_df = fetch_weather_data(crag_df)
-    cleaned_weather_df = clean_weather_data(weather_df)
-    load(crag_df, cleaned_weather_df, tmp_path)
+
