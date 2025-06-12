@@ -1,0 +1,511 @@
+{
+    "success": true,
+    "results": [
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_table_column_count_to_equal",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "value": 12
+                },
+                "meta": {},
+                "id": "8fde821a-0c31-41dd-893f-98aa78523c54"
+            },
+            "result": {
+                "observed_value": 12
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_table_row_count_to_equal",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "value": 138754
+                },
+                "meta": {},
+                "id": "d2b78b6c-b4cf-474e-89af-53441cbddf2c"
+            },
+            "result": {
+                "observed_value": 138754
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_table_columns_to_match_set",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column_set": [
+                        "sector_name",
+                        "crag_name",
+                        "county",
+                        "country",
+                        "rocktype",
+                        "latitude",
+                        "longitude",
+                        "routes_count",
+                        "route_name",
+                        "type",
+                        "difficulty_grade",
+                        "safety_grade"
+                    ]
+                },
+                "meta": {},
+                "id": "f48ee642-d481-40e6-893d-dd610fd8258a"
+            },
+            "result": {
+                "observed_value": [
+                    "sector_name",
+                    "crag_name",
+                    "county",
+                    "country",
+                    "rocktype",
+                    "latitude",
+                    "longitude",
+                    "routes_count",
+                    "route_name",
+                    "type",
+                    "difficulty_grade",
+                    "safety_grade"
+                ]
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_distinct_values_to_equal_set",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "country",
+                    "value_set": [
+                        "England"
+                    ]
+                },
+                "meta": {},
+                "id": "173dc34b-f1fa-4dd5-8747-08a08cef2187"
+            },
+            "result": {
+                "observed_value": [
+                    "England"
+                ],
+                "details": {
+                    "value_counts": [
+                        {
+                            "value": "England",
+                            "count": 138754
+                        }
+                    ]
+                }
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "country",
+                    "type_": "str"
+                },
+                "meta": {},
+                "id": "0b44f945-ad7a-4219-9f05-660b49a8d1d6"
+            },
+            "result": {
+                "observed_value": "str"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_not_be_null",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "routes_count"
+                },
+                "meta": {},
+                "id": "d32db053-d6ff-42ee-a085-5759e77445c8"
+            },
+            "result": {
+                "element_count": 138754,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "routes_count",
+                    "type_": "int64"
+                },
+                "meta": {},
+                "id": "83cafdba-8ccd-4197-b6a4-69e4d83699b9"
+            },
+            "result": {
+                "observed_value": "int64"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_not_be_null",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "crag_name"
+                },
+                "meta": {},
+                "id": "68017941-21ac-494a-ab23-6e34bce9aeb6"
+            },
+            "result": {
+                "element_count": 138754,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "crag_name",
+                    "type_": "str"
+                },
+                "meta": {},
+                "id": "aeccbd03-d21c-435e-9d93-6c0b079e19ce"
+            },
+            "result": {
+                "observed_value": "str"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_not_be_null",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "longitude"
+                },
+                "meta": {},
+                "id": "bf2abf0f-9012-4d56-b837-e9222ba2fbe8"
+            },
+            "result": {
+                "element_count": 138754,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "longitude",
+                    "type_": "float"
+                },
+                "meta": {},
+                "id": "2c4ec35c-e076-4aaf-94cf-e7a5a7dfcc01"
+            },
+            "result": {
+                "observed_value": "float64"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_not_be_null",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "latitude"
+                },
+                "meta": {},
+                "id": "7b2c2bde-e85c-450c-b333-1747058f4bb5"
+            },
+            "result": {
+                "element_count": 138754,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "latitude",
+                    "type_": "float"
+                },
+                "meta": {},
+                "id": "7cdb413f-ab35-4a67-9bd2-9d56d856b55b"
+            },
+            "result": {
+                "observed_value": "float64"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "sector_name",
+                    "type_": "str"
+                },
+                "meta": {},
+                "id": "db7545b0-c281-4e0c-b733-c303ef8daf7b"
+            },
+            "result": {
+                "observed_value": "str"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "county",
+                    "type_": "str"
+                },
+                "meta": {},
+                "id": "e51202e9-2799-44f7-b5c7-d1e5f24df52c"
+            },
+            "result": {
+                "observed_value": "str"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "route_name",
+                    "type_": "str"
+                },
+                "meta": {},
+                "id": "4afbe17d-8031-4e8e-b4f9-0917e17ed5ac"
+            },
+            "result": {
+                "observed_value": "str"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "difficulty_grade",
+                    "type_": "str"
+                },
+                "meta": {},
+                "id": "ac74901f-c499-4e8e-b5d2-a24540dfc30f"
+            },
+            "result": {
+                "observed_value": "str"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "rocktype",
+                    "type_": "CategoricalDtypeType"
+                },
+                "meta": {},
+                "id": "4f59c6c0-3daa-453b-86dc-0ec6051cc000"
+            },
+            "result": {
+                "observed_value": "CategoricalDtypeType"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        },
+        {
+            "success": true,
+            "expectation_config": {
+                "type": "expect_column_values_to_be_of_type",
+                "kwargs": {
+                    "batch_id": "crag_df-data_asset_crag",
+                    "column": "type",
+                    "type_": "CategoricalDtypeType"
+                },
+                "meta": {},
+                "id": "ebea6b52-e2e4-4682-be8f-1a82afb7e19e"
+            },
+            "result": {
+                "observed_value": "CategoricalDtypeType"
+            },
+            "meta": {},
+            "exception_info": {
+                "raised_exception": false,
+                "exception_traceback": null,
+                "exception_message": null
+            }
+        }
+    ],
+    "suite_name": "crag_suite",
+    "suite_parameters": {},
+    "statistics": {
+        "evaluated_expectations": 19,
+        "successful_expectations": 19,
+        "unsuccessful_expectations": 0,
+        "success_percent": 100.0
+    },
+    "meta": {
+        "great_expectations_version": "1.4.6",
+        "batch_spec": {
+            "batch_data": "PandasDataFrame"
+        },
+        "batch_markers": {
+            "ge_load_time": "20250612T130650.365514Z",
+            "pandas_data_fingerprint": "6081ead497ee10f7ff6b1648c8282350"
+        },
+        "active_batch_definition": {
+            "datasource_name": "crag_df",
+            "data_connector_name": "fluent",
+            "data_asset_name": "data_asset_crag",
+            "batch_identifiers": {
+                "dataframe": "<DATAFRAME>"
+            }
+        },
+        "validation_id": "113f019f-a1b1-477a-b3e4-fa446b6b0733",
+        "checkpoint_id": null,
+        "run_id": {
+            "run_name": null,
+            "run_time": "2025-06-12T14:06:50.642432+01:00"
+        },
+        "validation_time": "2025-06-12T13:06:50.642432+00:00",
+        "batch_parameters": {
+            "dataframe": "<DATAFRAME>"
+        }
+    },
+    "id": null
+}

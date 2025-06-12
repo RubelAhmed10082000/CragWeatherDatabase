@@ -21,8 +21,8 @@ def run_expectations():
 
 
     # Importing the data into Great Expectations
-    cleaned_weather_df = pd.read_parquet('Working_Code/cleaned_weather_df.parquet')
-    crag_df = pd.read_parquet('Working_Code/crag_df.parquet')
+    cleaned_weather_df = pd.read_parquet('dags/Files/cleaned_weather_df.parquet')
+    crag_df = pd.read_parquet('dags/Files/crag_df.parquet')
 
     # Creating data context
     context = gx.get_context()
@@ -182,9 +182,9 @@ def run_expectations():
         batch_parameters={"dataframe":crag_df}
     )
     # Save the validation results to JSON files
-    with open('Working_Code/weather_validation_results.json', 'w') as f:
+    with open('dags/Files/weather_validation_results.json', 'w') as f:
         json.dump(weather_result.to_json_dict(), f, indent=4) 
-    with open('Working_Code/crag_validation_results.json', 'w') as f:
+    with open('dags/Files/crag_validation_results.json', 'w') as f:
         json.dump(crag_result.to_json_dict(), f, indent=4)  
 
     # Check for failures and open if needed
@@ -195,5 +195,5 @@ def run_expectations():
     else:
         print("All validations passed.")
 
-run_expectations()
+
 

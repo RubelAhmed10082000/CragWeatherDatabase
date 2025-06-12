@@ -27,7 +27,7 @@ with DAG(
         Amalgamates all ETL functions into one
         """
         # Extracting raw data from all_crags.json
-        extracted_df = extract('all_crags.json')
+        extracted_df = extract('dags/Files/all_crags.json')
 
         # Transforming raw data, exploding and normalising Pd.DataFrame
         transformed_df = transform(extracted_df)

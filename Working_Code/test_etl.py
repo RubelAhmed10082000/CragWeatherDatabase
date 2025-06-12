@@ -161,8 +161,10 @@ def test_no_duplicates_weather(cleaned_weather_df):
 def test_crag_df_row_count(crag_df):
     assert len(crag_df) == 138754, f"Expected 138754 rows, but got {len(cleaned_weather_df)}"
 
+# Expect this test to fail as main.py currently fetches only weather data for the first 50 crags, being more conveinent for testing.
+@pytest.mark.xfail(reason="Weather data currently only fetched for first 50 crags")
 def test_weather_df_row_count(cleaned_weather_df):
-    assert len(cleaned_weather_df) == 8400, f"Expected 8400 rows, but got {len(cleaned_weather_df)}"
+    assert len(cleaned_weather_df) == 712992, f"Expected 712992 rows, but got {len(cleaned_weather_df)}"
 
 def test_crag_column_present(crag_df):
     expected_columns = [
