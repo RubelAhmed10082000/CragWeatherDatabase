@@ -10,6 +10,7 @@ import requests_cache
 import duckdb
 from datetime import datetime 
 from time import sleep
+from expectations import run_expectations
 
 def extract(raw_data):
     """
@@ -32,10 +33,10 @@ def extract(raw_data):
         return None
     # Normalizing the JSON data into a DataFrame
     try:
-        all_crags = pd.json_normalize(all_crags, record_path=['crags'])
-        all_crags.to_csv('all_crags.csv')
+        extracted_df = pd.json_normalize(all_crags, record_path=['crags'])
+        extracted_df.to_parquet('extracted_df.parquet', index=None)
         print("file successfully turned into a dataframe")
-        return all_crags
+        return extracted_df
     except Exception as E:
         print(f"file was not successfully turned into dataframe. Error: {E}")
         return None
@@ -88,7 +89,7 @@ def transform(extracted_data):
         # Rename crag-related columns
         transformed_df = transformed_df.rename(columns={'name': 'crag_name', 'id': 'crag_id'})
     
-        transformed_df.to_csv('extracted_df.csv')
+        transformed_df.to_parquet('transformed_df.parquet', index=None)
         print(f"file successfully normalized. Dataframe has {transformed_df.shape}")
         return transformed_df
         
@@ -138,7 +139,7 @@ def clean(transformed_data):
        
         # Creating both 'difficulty_grade' and 'safety_grade' columns
         crag_df['difficulty_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[1] if isinstance(x, str) and ' ' in x else x).astype('string')
-        crag_df['safety_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[0] if isinstance(x, str) and ' ' in x else np.nan).astype('category')
+        crag_df['safety_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[0] if isinstance(x, str) and ' ' in x else np.nan).astype('string')
         
         # Dropping grade column
         crag_df = crag_df.drop(columns=['grade'])
@@ -232,7 +233,7 @@ def fetch_weather_data(crag_df):
 
         # Concatenate all weather dataframes into one
         weather_df = pd.concat(weather_results).reset_index(drop=True)
-        weather_df.to_csv('weather_df.csv')
+        weather_df.to_parquet('weather_df.parquet', index=None)
         print(f"API Call was successful.{weather_df.shape}")
         return weather_df
 
@@ -301,6 +302,7 @@ def load (crag_df, cleaned_weather_df):
             'Alpine',
             'Via Ferrata'
             );
+                
         
             CREATE TYPE rocktype AS ENUM (
             'Gritstone',
@@ -457,11 +459,8 @@ def load (crag_df, cleaned_weather_df):
         return None
     
     finally:
-        con.close()   
+        con.close()
+        print("Connection to DuckDB closed.")   
 
 
-extracted_df = extract('all_crags.json')
-transformed_df = transform(extracted_df)    
-crag_df = clean(transformed_df)
-weather_df = fetch_weather_data(crag_df)
-cleaned_weather_df = clean_weather_data(weather_df)
+
