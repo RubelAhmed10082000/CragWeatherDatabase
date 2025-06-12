@@ -18,14 +18,14 @@ def run_expectations():
     import great_expectations as gx
     import pandas as pd
     import json
-
+    from great_expectations.data_context import FileDataContext
 
     # Importing the data into Great Expectations
     cleaned_weather_df = pd.read_parquet('dags/Files/cleaned_weather_df.parquet')
     crag_df = pd.read_parquet('dags/Files/crag_df.parquet')
 
     # Creating data context
-    context = gx.get_context()
+    context = FileDataContext(context_root_dir="/opt/airflow/great_expectations")
     # Connecting context to relevant Pd.DataFrame
     data_source_weather = context.data_sources.add_pandas(name='cleaned_weather_df')
     data_source_crag = context.data_sources.add_pandas(name='crag_df')
