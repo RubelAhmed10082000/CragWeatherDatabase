@@ -44,13 +44,12 @@ def test_transform_country_column(crag_df):
     assert all(crag_df['country'] == 'England')
 
 def test_clean_column_types_crag(crag_df):
-    string_columns = ['sector_name', 'crag_name', 'county', 'country', 'route_name', 'difficulty_grade']
+    string_columns = ['sector_name', 'crag_name', 'county', 'country', 'route_name', 'difficulty_grade', 'safety_grade']
     for col in string_columns:
         assert ptypes.is_string_dtype(crag_df[col])
 
     assert ptypes.is_integer_dtype(crag_df['routes_count'])
     assert isinstance(crag_df['type'].dtype, pd.CategoricalDtype)
-    assert isinstance(crag_df['safety_grade'].dtype, pd.CategoricalDtype)
     assert ptypes.is_float_dtype(crag_df['latitude'])
     assert ptypes.is_float_dtype(crag_df['longitude'])
 
