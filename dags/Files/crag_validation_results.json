@@ -1,5 +1,5 @@
 {
-    "success": false,
+    "success": true,
     "results": [
         {
             "success": true,
@@ -10,7 +10,7 @@
                     "value": 12
                 },
                 "meta": {},
-                "id": "9f94d0d5-e007-4fff-9b85-3a6fed4db631"
+                "id": "72f51f1d-0b33-408a-a51d-e90c84613abd"
             },
             "result": {
                 "observed_value": 12
@@ -31,7 +31,7 @@
                     "value": 138754
                 },
                 "meta": {},
-                "id": "f96040a2-a10a-4a2b-915a-47fdfd4c6d81"
+                "id": "ae2751d9-36a0-41fa-8c4d-fcd0caf80340"
             },
             "result": {
                 "observed_value": 138754
@@ -65,7 +65,7 @@
                     ]
                 },
                 "meta": {},
-                "id": "3a273627-9407-46b5-bece-30d27448389e"
+                "id": "28bc02d3-ad06-483f-b019-388bcdc32d3a"
             },
             "result": {
                 "observed_value": [
@@ -102,7 +102,7 @@
                     ]
                 },
                 "meta": {},
-                "id": "b765be2f-b914-4299-89f5-db58580fb3e3"
+                "id": "b03b216e-6adb-4e66-940c-06622d69ff1d"
             },
             "result": {
                 "observed_value": [
@@ -134,7 +134,7 @@
                     "type_": "str"
                 },
                 "meta": {},
-                "id": "ed6aa435-105e-476b-9684-2c4680904220"
+                "id": "c4713f96-8e5b-4053-a377-b5338be2392a"
             },
             "result": {
                 "observed_value": "str"
@@ -155,7 +155,7 @@
                     "column": "routes_count"
                 },
                 "meta": {},
-                "id": "c4c58907-f44d-4ff6-96de-544be5345e49"
+                "id": "929a0f1e-6e4a-44d1-90ca-1bdd3157b7c5"
             },
             "result": {
                 "element_count": 138754,
@@ -182,7 +182,7 @@
                     "type_": "int64"
                 },
                 "meta": {},
-                "id": "70488f1b-07ab-4576-bc10-daff6faf0b91"
+                "id": "e4518635-d26f-41cc-9d27-7d9425e5e67b"
             },
             "result": {
                 "observed_value": "int64"
@@ -203,7 +203,7 @@
                     "column": "crag_name"
                 },
                 "meta": {},
-                "id": "4b6d0f67-1423-4195-9ad6-8a1f6a267150"
+                "id": "e605f846-e717-430d-a429-9768f7e3a6da"
             },
             "result": {
                 "element_count": 138754,
@@ -230,7 +230,7 @@
                     "type_": "str"
                 },
                 "meta": {},
-                "id": "a4797fe2-0a9a-45ef-a7fa-7dc496a1dbf0"
+                "id": "315cb358-acbe-417b-a7a6-c1444a528868"
             },
             "result": {
                 "observed_value": "str"
@@ -251,7 +251,7 @@
                     "column": "longitude"
                 },
                 "meta": {},
-                "id": "0bb5ee81-bf94-4998-b46e-94be7ca28348"
+                "id": "362939a5-b898-4109-8965-d258a3f04d88"
             },
             "result": {
                 "element_count": 138754,
@@ -278,7 +278,7 @@
                     "type_": "float"
                 },
                 "meta": {},
-                "id": "4c1d00ed-2716-47de-aaaa-1b43dbd3fcde"
+                "id": "40c501f3-006d-4528-9979-68976227ae8c"
             },
             "result": {
                 "observed_value": "float64"
@@ -299,7 +299,7 @@
                     "column": "latitude"
                 },
                 "meta": {},
-                "id": "f9d259e2-8961-4a6b-819f-76789600f4dc"
+                "id": "9c3fdbff-c995-4182-a809-f8d75d95bde3"
             },
             "result": {
                 "element_count": 138754,
@@ -326,7 +326,7 @@
                     "type_": "float"
                 },
                 "meta": {},
-                "id": "305734c7-5af1-4087-b2de-ae4e6c5ae70e"
+                "id": "9234c224-77bd-4dc8-b814-f95a3bd0791b"
             },
             "result": {
                 "observed_value": "float64"
@@ -348,7 +348,7 @@
                     "type_": "str"
                 },
                 "meta": {},
-                "id": "083a519e-d65a-4e47-b24a-443041a93a5f"
+                "id": "7cff4d93-699e-4a50-95f4-e6d0c1b9dee0"
             },
             "result": {
                 "observed_value": "str"
@@ -370,7 +370,7 @@
                     "type_": "str"
                 },
                 "meta": {},
-                "id": "52983916-6f82-4d1d-97e8-e1782d9d40fc"
+                "id": "d73a1d41-34e8-46f8-8c3c-e48fc6347059"
             },
             "result": {
                 "observed_value": "str"
@@ -392,7 +392,7 @@
                     "type_": "str"
                 },
                 "meta": {},
-                "id": "c5e433a6-d762-448c-b677-24b720325964"
+                "id": "1c5f55ce-8222-48c6-8aee-2c10989697db"
             },
             "result": {
                 "observed_value": "str"
@@ -414,7 +414,7 @@
                     "type_": "str"
                 },
                 "meta": {},
-                "id": "a1091615-6e09-48c5-b8d8-95fbfa50be26"
+                "id": "6c34bcc7-bf98-4a79-95ea-7b9826cf1a11"
             },
             "result": {
                 "observed_value": "str"
@@ -436,7 +436,7 @@
                     "type_": "CategoricalDtypeType"
                 },
                 "meta": {},
-                "id": "84f88e00-3249-4f0a-b7ee-1317fad23c5c"
+                "id": "6c2b3f97-2a81-41e0-926e-763ca80b9e3a"
             },
             "result": {
                 "observed_value": "CategoricalDtypeType"
@@ -449,19 +449,19 @@
             }
         },
         {
-            "success": false,
+            "success": true,
             "expectation_config": {
                 "type": "expect_column_values_to_be_of_type",
                 "kwargs": {
                     "batch_id": "crag_df-data_asset_crag",
-                    "column": "safety_grade",
+                    "column": "type",
                     "type_": "CategoricalDtypeType"
                 },
                 "meta": {},
-                "id": "4481e6d1-61f9-4f1e-956e-990c60a18b54"
+                "id": "ef0d430f-ead2-4231-b690-0708556b8e5f"
             },
             "result": {
-                "observed_value": "str"
+                "observed_value": "CategoricalDtypeType"
             },
             "meta": {},
             "exception_info": {
@@ -475,9 +475,9 @@
     "suite_parameters": {},
     "statistics": {
         "evaluated_expectations": 19,
-        "successful_expectations": 18,
-        "unsuccessful_expectations": 1,
-        "success_percent": 94.73684210526315
+        "successful_expectations": 19,
+        "unsuccessful_expectations": 0,
+        "success_percent": 100.0
     },
     "meta": {
         "great_expectations_version": "1.4.6",
@@ -485,7 +485,7 @@
             "batch_data": "PandasDataFrame"
         },
         "batch_markers": {
-            "ge_load_time": "20250612T150337.336585Z",
+            "ge_load_time": "20250614T161322.373861Z",
             "pandas_data_fingerprint": "6081ead497ee10f7ff6b1648c8282350"
         },
         "active_batch_definition": {
@@ -496,13 +496,13 @@
                 "dataframe": "<DATAFRAME>"
             }
         },
-        "validation_id": "98e90358-9a54-4fc3-b743-aaeb29e6d818",
+        "validation_id": "0077cdc7-d09f-4891-9f88-cc5098990c19",
         "checkpoint_id": null,
         "run_id": {
             "run_name": null,
-            "run_time": "2025-06-12T16:03:37.631732+01:00"
+            "run_time": "2025-06-14T16:13:23.024539+00:00"
         },
-        "validation_time": "2025-06-12T15:03:37.631732+00:00",
+        "validation_time": "2025-06-14T16:13:23.024539+00:00",
         "batch_parameters": {
             "dataframe": "<DATAFRAME>"
         }

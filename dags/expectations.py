@@ -18,14 +18,14 @@ def run_expectations():
     import great_expectations as gx
     import pandas as pd
     import json
-    from great_expectations.data_context import FileDataContext
+
 
     # Importing the data into Great Expectations
     cleaned_weather_df = pd.read_parquet('dags/Files/cleaned_weather_df.parquet')
     crag_df = pd.read_parquet('dags/Files/crag_df.parquet')
 
     # Creating data context
-    context = FileDataContext(context_root_dir="/opt/airflow/great_expectations")
+    context = gx.get_context()
     # Connecting context to relevant Pd.DataFrame
     data_source_weather = context.data_sources.add_pandas(name='cleaned_weather_df')
     data_source_crag = context.data_sources.add_pandas(name='crag_df')
@@ -57,7 +57,7 @@ def run_expectations():
     column_count_expectations_crag = gx.expectations.ExpectTableColumnCountToEqual(
         value=12
     )
-
+    # Expectation for weather row count currently 8400, but will be 700,000 if head(50) argument removed from fetch_weather_data function
     row_count_expectations_weather = gx.expectations.ExpectTableRowCountToEqual(
         value=8400
     )
@@ -109,7 +109,7 @@ def run_expectations():
 
     crag_cols_str = ['sector_name', 'crag_name', 'county', 'country', 'route_name', 'difficulty_grade']
 
-    crag_cols_category = ['rocktype', 'safety_grade']
+    crag_cols_category = ['rocktype', 'type']
 
     crags_cols_float = ['longitude', 'latitude']
 

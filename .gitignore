@@ -14,3 +14,7 @@ dags/__pycache__/expectations.cpython-312.pyc
 dags/__pycache__/main.cpython-312.pyc
 
 config/
+
+Working_Code/__pycache__/
+
+.cache.sqlite
