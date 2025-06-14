@@ -1,3 +1,5 @@
+![image](https://github.com/user-attachments/assets/077c0bd1-01e6-43c9-8aa0-a2cc874e2297)
+
 **Crag Weather Database**
 
 I created a data pipeline that ingests both rock climbing location data and 7 day hourly weather forecasts that is then matched in a database.
@@ -7,7 +9,7 @@ The goal is to allow climbers to plan their outdoor climbing trips by filtering 
 
 Tech used: 
 
-Python, SQL, DUCKDB, Pandas, Openmeteo-Requests, Docker, Airflow, Great-Expectations, Numpy, Dateutil
+Python, SQL, Pandas, JSON, DUCKDB, Pandas, Openmeteo-Requests, Docker, Airflow, Great-Expectations, Numpy, Dateutil
 
 Data flow:
 
@@ -27,9 +29,12 @@ Both climbing and weather dataframes were used ingested into a DUCKDB in-memory 
 
 ![ktflvqnw1r0f1](https://github.com/user-attachments/assets/57a316f2-b8d6-46d4-a7e7-e4190578f390)
 
+Great-Expectations validations was used to check data intergrity on both schema, row and column level. The expectations were intergrating directly into the pipeline, in the form of the run_expectations() function, instead of being an Airflow Operator
+
 I used created a simple Airflow DAG to run the entire pipeline automatically everyday at 1am. Docker was used to create a virtual enviroment for my which both my DAG and my pipeline will run
 
-Great-Expectations is currently being worked on, this will validation both the schema as well as column datatypes for both the climbing and weather database before being ingested into DUCKDB. The validation will then be intergrated into the Airflow DAG
+![image](https://github.com/user-attachments/assets/e03a0fd9-23ea-4de1-8469-6036c0e8b323)
+
 
 **Lessons Learned / Challenges:**
 
@@ -37,16 +42,42 @@ Webscraping - I tried to webscrape the data myself but ultimately failed. I beli
 
 Docker - Setting up a working Docker enviroment was also challenging due to its depth, complexity and the need to understand file structures. It took me a lot of trial and error to get the Docker container, and by extension an Airflow DAG, working
 
-**To Do**:
+Great Expectations - Great Expectations is a package that allows for data validation. However, I have found this package cumbersome. For example, setting up validation takes multiple steps and it is required to add validations to a suite one at a time. I believe this pacakge will be a key bottleneck when expanding.
 
-Great-Expectations - Need to create Great-Expectation validation suite and intergrate validation checkpoints into my Airflow DAG
-Pytest - Run unit tests
 
 **Next Steps**:
 
-FastAPI - I plan on learning FastAPI and Pydantic to be able create a frontend to display the locations and weather data to an end-user
+Frontend - I plan on learning Django to be able create a frontend to display the locations and weather data to an end-user
 
 Scaling Up - I want to scale up my pipeline by adding climbing locations from other countries. However, this may require SPARK as well as a cloud based data warehouse
+
+Multiple DAGs - As you can see in the picture, I have only one DAG instance of which includes my entire ETL pipeline. I may want to make each stage of the pipeline its own instance in order to enhance modularity and be able to monitor the DAG.
+
+**How To Get It Working**:
+
+- Please install the needed packages via requirements.txt
+  
+- The extract() functions takes in 'all_crags.json' as an argument
+
+- Execution code would look something like this:
+
+ extracted_df = extract('dags/Files/all_crags.json')
+ 
+ transformed_df = transform(extracted_df)
+ 
+ crag_df = clean(transformed_df)
+ 
+ weather_df = fetch_weather_data()
+ 
+ cleaned_weather_df = clean_weather_data(weather_df)
+ 
+ run_expectations()
+ 
+ load_result = load(crag_df, cleaned_weather_df)
+
+In order to get the Airflow DAG working, please to refer to this documenation: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
+
+In order to get the DAG to work your PC must allow virtualisation and you must have the Docker application installed and open on your PC.
 
 
 
