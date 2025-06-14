@@ -57,7 +57,7 @@ def run_expectations():
     column_count_expectations_crag = gx.expectations.ExpectTableColumnCountToEqual(
         value=12
     )
-
+    # Expectation for weather row count currently 8400, but will be 700,000 if head(50) argument removed from fetch_weather_data function
     row_count_expectations_weather = gx.expectations.ExpectTableRowCountToEqual(
         value=8400
     )
