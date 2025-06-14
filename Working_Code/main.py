@@ -462,5 +462,3 @@ def load (crag_df, cleaned_weather_df):
         con.close()
         print("Connection to DuckDB closed.")   
 
-crag_df = pd.read_parquet('Working_Code/Files/crag_df.parquet')
-print(crag_df.dtypes)
