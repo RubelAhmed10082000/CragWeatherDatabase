@@ -9,7 +9,7 @@ The goal is to allow climbers to plan their outdoor climbing trips by filtering 
 
 Tech used: 
 
-Python, SQL, Pandas, JSON, DUCKDB, Pandas, Openmeteo-Requests, Docker, Airflow, Great-Expectations, Numpy, Dateutil
+Python, SQL, Pandas, JSON, DUCKDB, Pandas, Openmeteo-Requests, Docker, Airflow, Great-Expectations, Numpy, Dateutil, Pytest
 
 Data flow:
 
