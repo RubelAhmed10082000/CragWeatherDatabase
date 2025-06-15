@@ -23,19 +23,19 @@ This created a Dataframe consisting of all known climbing locations, with their 
 
 Next, my fetch_weather_data() function made an API call using the OpenMeteo weather API. I passed both Longitude and Latitude columns from my climbing location Dataframe as an argument to the API call which allowed me to receive weather data for every climbing location in England.
 
-Currently I have set this code to only retrieve the weather data for the first 50 crags. This makes testing and debugging easier. The Dataframe which returns the the weather for all crags has 710,000 rows, however, the call is much longer. When the API is develop, we can use pagination to only call the weather data that is needed as well as incorporate threading. This will allow for fast access to weather data
+Currently I have set this code to only retrieve the weather data for the first 50 crags. This makes testing and debugging easier. The Dataframe which returns the the weather for all crags has 710,000 rows, however, the call is much longer. When the endpoint is developed, we can use pagination to only call the weather data that is needed as well as incorporate threading. This will allow for fast access to weather data
 
 ![image](https://github.com/user-attachments/assets/f8bf3835-9ed8-4854-8b47-33576170bbd4)
 
 clean_weather_data() does simple cleaning on the weather Dataframe, renaming some columns for better readabilty
 
-Both climbing and weather dataframes were used ingested into a DUCKDB in-memory database, I adopted a simple database schema. Credit to reddit user No-Adhesiveness-6921 for helping me develop this schema
+Both climbing and weather dataframes ingested into a DUCKDB in-memory database, I adopted a simple database schema. Credit to reddit user No-Adhesiveness-6921 for helping me develop this schema
 
 ![ktflvqnw1r0f1](https://github.com/user-attachments/assets/57a316f2-b8d6-46d4-a7e7-e4190578f390)
 
 Great-Expectations validations was used to check data intergrity on both schema, row and column level. The expectations were intergrating directly into the pipeline, in the form of the run_expectations() function, instead of being an Airflow Operator
 
-I used created a simple Airflow DAG to run the entire pipeline automatically everyday at 1am. Docker was used to create a virtual enviroment for my which both my DAG and my pipeline will run
+I created a simple Airflow DAG to run the entire pipeline automatically everyday at 1am. Docker was used to create a virtual enviroment from my which my DAG will run
 
 ![image](https://github.com/user-attachments/assets/e03a0fd9-23ea-4de1-8469-6036c0e8b323)
 
@@ -52,7 +52,7 @@ Great Expectations - Great Expectations is a package that allows for data valida
 
 **Next Steps**:
 
-Frontend - I plan on learning Django to be able create a frontend to display the locations and weather data to an end-user
+Frontend - I plan on learning FastAPI to be able create a frontend to display the locations and weather data to an end-user
 
 Scaling Up - I want to scale up my pipeline by adding climbing locations from other countries. However, this may require SPARK as well as a cloud based data warehouse
 
