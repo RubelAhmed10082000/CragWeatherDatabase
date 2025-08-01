@@ -118,12 +118,7 @@ def clean(transformed_data):
     
     try:
         # Dropping unnecessary columns
-        crag_df = transformed_data.drop(columns=['direction', 'is_hill', 'slug', 'difficulty', 'stars'])
-        
-        # Changing columns to relevant data types
-        astype_crag = {'crag_name': 'string', 'county': 'string', 'country': 'string', 'rocktype': 'category', 'sector_name': 'string', 'grade': 'string', 'type': 'category', 'longitude': 'float64', 'latitude': 'float64', 'route_name': 'string'}
-        
-        crag_df = crag_df.astype(astype_crag)
+        crag_df = transformed_data.drop(columns=['direction', 'is_hill', 'slug', 'difficulty', 'stars'])        
         
         # Removing any rows where the longitude and latitude are 0
         crag_df = crag_df.loc[~((crag_df['longitude'] == 0) | (crag_df['latitude'] == 0))]
@@ -137,9 +132,61 @@ def clean(transformed_data):
         # Replacing all nulls in sector_name with 'Main Area'
         crag_df['sector_name'] = crag_df['sector_name'].replace(np.nan, 'Main Area')
        
-        # Creating both 'difficulty_grade' and 'safety_grade' columns
-        crag_df['difficulty_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[1] if isinstance(x, str) and ' ' in x else x).astype('string')
-        crag_df['safety_grade'] = crag_df['grade'].apply(lambda x: x.split(' ', 1)[0] if isinstance(x, str) and ' ' in x else np.nan).astype('string')
+        # Creating a list of all UK safety grades
+        uk_safety_grade = ['M', 'MOD', 'D', 'VD', 'HVD',
+                           'S', 'HS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 12)]
+        
+        
+        # Now split cleaned grade into safety and difficulty
+        def extract_safety_and_difficulty(grade):
+            """
+            Creates two columns. Safety grade and difficulty grade. Does this by splitting the grade column.
+
+            Args: grade column
+
+            Result:
+
+            Safety
+            Difficulty
+            
+            """
+
+            # Returns none if column is not string
+            if not isinstance(grade, str):
+                return (np.nan, np.nan)
+            # Splits grade column into two different parts
+            parts = grade.split(' ', 1)
+            # If part[0] is in the uk_safety_grade list then it is added to the safety column 
+            if parts[0].upper() in uk_safety_grade:
+                safety = parts[0].upper()
+                # The part[1] is added into the difficulty column.
+                difficulty = parts[1] if len(parts) > 1 else np.nan
+            else:
+                # If part[0] is not in the safety_grade_list it is np.nan
+                safety = np.nan
+                difficulty = grade
+            return safety, difficulty
+        
+        # Applying function to the grade column, creating two new columns
+        crag_df[['safety_grade', 'difficulty_grade']] = crag_df['grade'].apply(lambda x: pd.Series(extract_safety_and_difficulty(x)))
+        
+        # 'MOD' is turned to 'M' to fit the safety_grading standard
+        crag_df['safety_grade'] = crag_df['safety_grade'].replace('MOD','M')
+
+        # Removing any instance of 'none' in difficulty_grade column
+        crag_df['difficulty_grade'] = crag_df['difficulty_grade'].str.replace(r'\bnone\b', '', case=False, regex=True)
+
+        # Removing any instance of 'project' in difficulty_grade column
+        crag_df['difficulty_grade'] = crag_df['difficulty_grade'].str.replace(r'\bproject\b', '', case=False, regex=True)
+
+        # Removing any instance of '?' in difficulty_grade column
+        crag_df.loc[crag_df['difficulty_grade'].str.contains(r'\?', na=False), 'difficulty_grade'] = np.nan
+
+        # Dropping MVS from difficulty grade column
+        crag_df['difficulty_grade'] = crag_df['difficulty_grade'].replace('MVS',np.nan)
+
+        # Removing any grades that have 'MVS' in them 
+        crag_df['difficulty_grade'] = crag_df['difficulty_grade'].str.replace('MVS', '')
         
         # Dropping grade column
         crag_df = crag_df.drop(columns=['grade'])
@@ -148,6 +195,12 @@ def clean(transformed_data):
         crag_df = crag_df.set_index('crag_id')
 
         crag_df[['longitude','latitude']] = crag_df[['longitude','latitude']].dropna()
+
+        # Changing columns to relevant data types
+        astype_crag = {'crag_name': 'string', 'county': 'string', 'country': 'string', 'rocktype': 'category', 'sector_name': 'string',
+                        'type': 'category', 'longitude': 'float64', 'latitude': 'float64', 'route_name': 'string', 'difficulty_grade':'string','safety_grade':'category'}
+        
+        crag_df = crag_df.astype(astype_crag)
         
         # Exporting function result to .csv
         crag_df.to_parquet('Working_Code/Files/crag_df.parquet', index=None)
@@ -156,6 +209,7 @@ def clean(transformed_data):
     except Exception as e:
         print(f"Cleaning unsuccessful: {e}")
         return None
+
 ### Unique_Cords has been set for head(50) to avoid long API call. For production, this should be removed or set to a higher number.###
 def fetch_weather_data(crag_df):
     """
