@@ -133,8 +133,8 @@ def clean(transformed_data):
         crag_df['sector_name'] = crag_df['sector_name'].replace(np.nan, 'Main Area')
        
         # Creating a list of all UK safety grades
-          uk_safety_grade = ['M', 'D', 'HD', 'VD', 'HVD', 'MS',
-                           'S', 'HS', 'MVS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 5)] + ['XS'] + [f'E{i}' for i in range(5, 13)]
+        uk_safety_grade = ['M', 'D', 'HD', 'VD', 'HVD', 'MS',
+                 'S', 'HS', 'MVS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 12)]
         
         
         # Now split cleaned grade into safety and difficulty
