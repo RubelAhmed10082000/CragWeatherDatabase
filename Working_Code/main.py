@@ -133,8 +133,8 @@ def clean(transformed_data):
         crag_df['sector_name'] = crag_df['sector_name'].replace(np.nan, 'Main Area')
        
         # Creating a list of all UK safety grades
-        uk_safety_grade = ['M', 'MOD', 'D', 'VD', 'HVD',
-                           'S', 'HS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 12)]
+          uk_safety_grade = ['M', 'D', 'HD', 'VD', 'HVD', 'MS',
+                           'S', 'HS', 'MVS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 5)] + ['XS'] + [f'E{i}' for i in range(5, 13)]
         
         
         # Now split cleaned grade into safety and difficulty
@@ -181,12 +181,6 @@ def clean(transformed_data):
 
         # Removing any instance of '?' in difficulty_grade column
         crag_df.loc[crag_df['difficulty_grade'].str.contains(r'\?', na=False), 'difficulty_grade'] = np.nan
-
-        # Dropping MVS from difficulty grade column
-        crag_df['difficulty_grade'] = crag_df['difficulty_grade'].replace('MVS',np.nan)
-
-        # Removing any grades that have 'MVS' in them 
-        crag_df['difficulty_grade'] = crag_df['difficulty_grade'].str.replace('MVS', '')
         
         # Dropping grade column
         crag_df = crag_df.drop(columns=['grade'])
