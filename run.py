@@ -1,10 +1,15 @@
-from src.extract import extract
-from src.transform import transform
-from src.clean import clean
-from src.fetch_weather_data import fetch_weather_data
-from src.clean_weather_data import clean_weather_data
-from src.load import load
-from src.validate import validate
+import sys
+
+sys.path.append('..')
+
+from modules.extract import extract
+from modules.transform import transform
+from modules.clean import clean
+from modules.fetch_weather_data import fetch_weather_data
+from modules.clean_weather_data import clean_weather_data
+from modules.load import load
+from modules.validate import validate
+
 
 extracted_df = extract('data/raw/all_crags.json')
 transformed_df = transform(extracted_df)
