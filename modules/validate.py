@@ -1,5 +1,5 @@
 
-def run_expectations():
+def validate():
     """
     This function runs the expectations for the weather and crag datasets.
     It checks for the following:
@@ -182,9 +182,9 @@ def run_expectations():
         batch_parameters={"dataframe":crag_df}
     )
     # Save the validation results to JSON files
-    with open('Working_Code/Files/weather_validation_results.json', 'w') as f:
+    with open('validations/weather_validation_results.json', 'w') as f:
         json.dump(weather_result.to_json_dict(), f, indent=4) 
-    with open('Working_Code/Files/crag_validation_results.json', 'w') as f:
+    with open('validations/crag_validation_results.json', 'w') as f:
         json.dump(crag_result.to_json_dict(), f, indent=4)  
 
     # Check for failures and open if needed
