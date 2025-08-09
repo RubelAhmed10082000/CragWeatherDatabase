@@ -25,7 +25,9 @@ Next, my fetch_weather_data() function made an API call using the OpenMeteo weat
 
 Currently I have set this code to only retrieve the weather data for the first 50 crags. This makes testing and debugging easier. The Dataframe which returns the the weather for all crags has 710,000 rows, however, the call is much longer. When the endpoint is developed, we can use pagination to only call the weather data that is needed as well as incorporate threading. This will allow for fast access to weather data
 
-![image](https://github.com/user-attachments/assets/f8bf3835-9ed8-4854-8b47-33576170bbd4)
+      unique_coords = crag_df[['latitude', 'longitude']].dropna().drop_duplicates().head(50)
+
+
 
 clean_weather_data() does simple cleaning on the weather Dataframe, renaming some columns for better readabilty
 
