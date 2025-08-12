@@ -1,0 +1,4 @@
+[submodule "world_crag_scraper"]
+	path = world_crag_scraper
+	url = https://github.com/RubelAhmed10082000/world_crag_scraper
+	branch = main
