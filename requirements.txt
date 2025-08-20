@@ -10,3 +10,4 @@ airflow-provider-great-expectations
 fastparquet
 pyarrow
 numpy==2.3.2
+psycopg

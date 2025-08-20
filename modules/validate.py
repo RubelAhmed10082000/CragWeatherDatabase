@@ -21,14 +21,14 @@ def validate():
 
 
     # Importing the data into Great Expectations
-    cleaned_weather_df = pd.read_parquet('Working_Code/Files/cleaned_weather_df.parquet')
-    crag_df = pd.read_parquet('Working_Code/Files/crag_df.parquet')
+    cleaned_weather_df = pd.read_parquet('data/processed/cleaned_weather_df.parquet')
+    crag_df = pd.read_parquet('data/processed/crag_df.parquet')
 
     # Creating data context
     context = gx.get_context()
     # Connecting context to relevant Pd.DataFrame
-    data_source_weather = context.data_sources.add_pandas(name='cleaned_weather_df')
-    data_source_crag = context.data_sources.add_pandas(name='crag_df')
+    data_source_weather = context.sources.add_pandas(name='cleaned_weather_df')
+    data_source_crag    = context.sources.add_pandas(name='crag_df')
 
     # Creating data asset
     data_asset_weather = data_source_weather.add_dataframe_asset(
