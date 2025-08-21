@@ -118,7 +118,7 @@ def copy_csv_to_table(csv_path: str, table: str, columns: list[str]) -> int:
 
         cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
         n = cur.fetchone()[0]
-        print(f"✅ Rows now in {table}: {n}")
+        print(f"Rows now in {table}: {n}")
         return n
 
 
