@@ -58,7 +58,7 @@ def main():
         dst_blob="cleaned/weather/cleaned_weather_df.parquet",
     )
 
-    load_from_gcs(
+    load_from_gcs (
     crag_parquet_gs    = gcs_url("cleaned","crag","crag_df.parquet"),
     weather_parquet_gs = gcs_url("cleaned","weather","cleaned_weather_df.parquet"),
     csv_archive_prefix = "archive/csv"   

@@ -141,9 +141,9 @@ def load_from_gcs(
     wx_cols   = parquet_to_csv_weather(weather_parquet_gs, weather_csv_gs)
 
     with connect(DATABASE_URL) as conn, conn.cursor() as cur:
-        cur.execute(f"TRUNCATE {TABLE_FACT};")
-        cur.execute(f"TRUNCATE {TABLE_WEATHER};")
-        cur.execute(f"TRUNCATE {TABLE_ROUTES};")
+        cur.execute(f"TRUNCATE {TABLE_FACT} RESTART IDENTITY CASCADE;")
+        cur.execute(f"TRUNCATE {TABLE_WEATHER} RESTART IDENTITY CASCADE;")
+        cur.execute(f"TRUNCATE {TABLE_ROUTES} RESTART IDENTITY CASCADE;")
         conn.commit()
 
     routes_rows  = _copy_csv_to_table_from_gcs(crag_csv_gs,    TABLE_ROUTES,  crag_cols)
