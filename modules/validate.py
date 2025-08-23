@@ -27,8 +27,8 @@ def validate():
     # Creating data context
     context = gx.get_context()
     # Connecting context to relevant Pd.DataFrame
-    data_source_weather = context.sources.add_pandas(name='cleaned_weather_df')
-    data_source_crag    = context.sources.add_pandas(name='crag_df')
+    data_source_weather = context.data_sources.add_pandas(name='cleaned_weather_df')
+    data_source_crag = context.data_sources.add_pandas(name='crag_df')
 
     # Creating data asset
     data_asset_weather = data_source_weather.add_dataframe_asset(

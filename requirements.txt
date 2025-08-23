@@ -11,3 +11,6 @@ fastparquet
 pyarrow
 numpy==2.3.2
 psycopg
+gcsfs
+google-cloud-storage
+

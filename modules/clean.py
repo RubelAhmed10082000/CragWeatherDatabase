@@ -1,11 +1,15 @@
 import numpy as np
 import pandas as pd
+from modules.gcs_io import gcs_url, read_parquet, write_parquet
 
 
-def clean(transformed_data):
+def clean(src_blob = "processed/crag/transformed_df.parquet",
+          dst_blob = "cleaned/crag/crag_df.parquet"):
+    
     """
     
     Cleans transformed dataframe. Produces new columns, applies appropriate data types, drops unneeded columns and applies np.nan
+    Exports to GCS blob storage as .parquet file
 
     Args:
     
@@ -16,29 +20,46 @@ def clean(transformed_data):
     cleaned_data (pd.DataFrame): Dataframe that has been cleaned
     
     """
-    if transformed_data is None:
+
+    src, dst = gcs_url(src_blob), gcs_url(dst_blob)
+
+    try:
+        crag_df = read_parquet(src)
+    except FileNotFoundError:
+        print(f"Source not found {src}")
+        return None
+
+    if crag_df is None:
         print("No data to clean")
         return None
     
     try:
+        crag_df = crag_df.replace("",np.nan)
         # Dropping unnecessary columns
-        crag_df = transformed_data.drop(columns=['direction', 'is_hill', 'slug', 'difficulty', 'stars'])        
+        drop_cols = ['direction', 'is_hill', 'slug', 'difficulty', 'stars']
+
+        crag_df = crag_df.drop(columns=[c for c in drop_cols if c in crag_df.columns], errors="ignore")     
         
         # Removing any rows where the longitude and latitude are 0
-        crag_df = crag_df.loc[~((crag_df['longitude'] == 0) | (crag_df['latitude'] == 0))]
+        for c in ("longitude","latitude"):
+            if c in crag_df.columns:
+                crag_df[c] = pd.to_numeric(crag_df[c], errors="coerce")   
+        crag_df = crag_df.dropna(subset=[c for c in ("longitude","latitude") if c in crag_df.columns])   
+        if "longitude" in crag_df.columns and "latitude" in crag_df.columns:
+            crag_df = crag_df.loc[~((crag_df["longitude"] == 0) | (crag_df["latitude"] == 0))]
         
-        # Replacing 'Summit' or 'summit' with NaN
-        crag_df = crag_df.replace(['Summit', 'summit'], np.nan)
-
-        # Applying np.nan to blank cells in relevant columns
-        crag_df = crag_df.fillna(value=np.nan)
-
-        # Replacing all nulls in sector_name with 'Main Area'
-        crag_df['sector_name'] = crag_df['sector_name'].replace(np.nan, 'Main Area')
+        
+        # Replacing 'Summit' or 'summit' with NaN, 
+        # Replacing blank sector names with 'Main Area'
+        if "sector_name" in crag_df.columns:
+            crag_df["sector_name"] = crag_df["sector_name"].replace(['Summit', 'summit'], np.nan)
+            crag_df["sector_name"] = crag_df["sector_name"].fillna("Main Area")
        
         # Creating a list of all UK safety grades
-        uk_safety_grade = ['M', 'D', 'HD', 'VD', 'HVD', 'MS',
-                 'S', 'HS', 'MVS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 12)]
+        if "grade" in crag_df.columns:
+
+            uk_safety_grade = ['M', 'D', 'HD', 'VD', 'HVD', 'MS',
+                    'S', 'HS', 'MVS', 'VS', 'HVS'] + [f'E{i}' for i in range(1, 12)]
         
         
         # Now split cleaned grade into safety and difficulty
@@ -92,16 +113,14 @@ def clean(transformed_data):
         # Setting ID as index
         crag_df = crag_df.set_index('crag_id')
 
-        crag_df[['longitude','latitude']] = crag_df[['longitude','latitude']].dropna()
-
         # Changing columns to relevant data types
         astype_crag = {'crag_name': 'string', 'county': 'string', 'country': 'string', 'rocktype': 'category', 'sector_name': 'string',
                         'type': 'category', 'longitude': 'float64', 'latitude': 'float64', 'route_name': 'string', 'difficulty_grade':'string','safety_grade':'category'}
         
         crag_df = crag_df.astype(astype_crag)
         
-        # Exporting function result to .csv
-        crag_df.to_parquet('data/processed/crag_df.parquet', index=None)
+        # Exporting function result to GCS blob storage as a parquet file
+        write_parquet(crag_df, dst)
         print(f"file successfully cleaned. Dataframe has {crag_df.shape}")
         return crag_df
     except Exception as e:
