@@ -18,3 +18,12 @@ config/
 Working_Code/__pycache__/
 
 .cache.sqlite
+
+.env
+
+.vscode/
+
+data/
+
+
+

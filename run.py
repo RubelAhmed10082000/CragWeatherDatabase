@@ -5,67 +5,46 @@ from modules.transform import transform
 from modules.clean import clean as clean_crag
 from modules.fetch_weather_data import fetch_weather_data
 from modules.clean_weather_data import clean_weather_data
-from modules.load import load_from_gcs
 from modules.load import load_weather_snapshot_from_gcs
 
-
-# Setting up GCS file pathways 
-
-RAW_JSON = gcs_url("raw", "all_crags.json")
-
-EXTRACTED_PARQUET   = gcs_url("processed", "crag", "extracted_df.parquet")
-TRANSFORMED_PARQUET = gcs_url("processed", "crag", "transformed_df.parquet")
-CRAG_PARQUET        = gcs_url("processed", "crag", "crag_df.parquet")
-
-WEATHER_RAW_PARQUET = gcs_url("processed", "weather", "weather_df.parquet")
-WEATHER_CLEAN_PARQ  = gcs_url("cleaned", "weather", "cleaned_weather_df.parquet")
-
-CSV_ARCHIVE_PREFIX  = "archive/csv" 
-
-MAX_POINTS = int(os.getenv("WX_MAX_POINTS", "50"))
+from config import (
+    RAW_JSON_BLOB,
+    EXTRACTED_BLOB,
+    TRANSFORMED_BLOB,
+    CRAG_PARQUET_BLOB,
+    WEATHER_RAW_BLOB,
+    WEATHER_CLEAN_BLOB,
+    CSV_LOAD_BLOB,
+    MAX_POINTS,
+)
 
 def main():
-
-    # Checking if enviroment variable exist
     if not os.getenv("DATABASE_URL"):
         raise RuntimeError("DATABASE_URL not set")
     if not os.getenv("GCS_BUCKET"):
-        raise RuntimeError("GCS_BUCKET not set (used by gcs_url)")
-    
-    df_ex = extract(json_blob_name="raw/all_crags.json") 
+        raise RuntimeError("GCS_BUCKET not set")
 
-    transform(
-        src_blob="processed/crag/extracted_df.parquet",
-        dst_blob="processed/crag/transformed_df.parquet",
-    )
+    extract(json_blob_name=RAW_JSON_BLOB)
 
-    clean_crag(
-        src_blob="processed/crag/transformed_df.parquet",
-        dst_blob="cleaned/crag/crag_df.parquet",
-    )
+    transform(src_blob=EXTRACTED_BLOB, dst_blob=TRANSFORMED_BLOB)
+
+    clean_crag(src_blob=TRANSFORMED_BLOB, dst_blob=CRAG_PARQUET_BLOB)
 
     fetch_weather_data(
-        crag_src="cleaned/crag/crag_df.parquet",
-        dst="processed/weather/weather_df.parquet",
-        max_points=MAX_POINTS,  
+        crag_src=CRAG_PARQUET_BLOB,         
+        dst=WEATHER_RAW_BLOB,             
+        max_points=MAX_POINTS,
     )
 
     clean_weather_data(
-        src_blob="processed/weather/weather_df.parquet",
-        dst_blob="cleaned/weather/cleaned_weather_df.parquet",
-    )
-
-    clean_weather_data(
-        src_blob="processed/weather/weather_df.parquet",
-        dst_blob="cleaned/weather/cleaned_weather_df.parquet",
+        src_blob=WEATHER_RAW_BLOB,          
+        dst_blob=WEATHER_CLEAN_BLOB,        
     )
 
     load_weather_snapshot_from_gcs(
-    weather_parquet_gs = gcs_url("cleaned","weather","cleaned_weather_df.parquet"),
-    csv_gs_uri         = gcs_url("load","weather_load.csv"), 
-)
+        weather_parquet_gs=gcs_url(*WEATHER_CLEAN_BLOB.split("/")),
+        csv_gs_uri=gcs_url(*CSV_LOAD_BLOB.split("/")),
+    )
 
 if __name__ == "__main__":
     main()
-
-

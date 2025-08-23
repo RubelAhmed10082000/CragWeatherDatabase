@@ -3,14 +3,11 @@ openmeteo-requests
 requests-cache
 retry-requests
 pandas
-apache-airflow
-great_expectations
 pytest
-airflow-provider-great-expectations
 fastparquet
 pyarrow
 numpy==2.3.2
 psycopg
 gcsfs
 google-cloud-storage
-
+pydantic_settings
