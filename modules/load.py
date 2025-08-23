@@ -1,17 +1,37 @@
+# modules/load.py
 import os
+import time
 import pandas as pd
 import fsspec
 from psycopg import connect, sql
-from modules.gcs_io import read_parquet
+from modules.gcs_io import read_parquet, gcs_url
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 TABLE_ROUTES  = "dimroutes"
 TABLE_WEATHER = "dimhourlyweatherinfo"
 TABLE_FACT    = "fact_hourlyrouteweather"
 
-def _write_csv_gcs(df: pd.DataFrame, gs_uri: str) -> None:
+
+def _write_csv_gcs(df: pd.DataFrame, gs_uri: str, *, header=False, na_rep="\\N") -> None:
+    """Write CSV to GCS with Postgres-friendly NULL marker."""
     with fsspec.open(gs_uri, "w", newline="") as f:
-        df.to_csv(f, index=False, header=False, na_rep="\\N")
+        df.to_csv(f, index=False, header=header, na_rep=na_rep)
+
+def _copy_csv_to_table_from_gcs(csv_gs_uri: str, table: str, columns: list[str]) -> int:
+    """Stream a CSV from GCS into Postgres via COPY FROM STDIN."""
+    cols = ", ".join([f'"{c}"' for c in columns])
+    copy_sql = f"""
+        COPY {table} ({cols})
+        FROM STDIN WITH (FORMAT csv, DELIMITER ',', NULL '\\N', QUOTE '\"')
+    """
+    with connect(DATABASE_URL) as conn, conn.cursor() as cur, fsspec.open(csv_gs_uri, "rb") as f:
+        with cur.copy(copy_sql) as cp:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                cp.write(chunk)
+        conn.commit()
+        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
+        return cur.fetchone()[0]
+
 
 def parquet_to_csv_crag(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
     """
@@ -20,7 +40,6 @@ def parquet_to_csv_crag(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
     """
     df = read_parquet(parquet_gs_uri).copy()
 
-    # 1) Rename to match DB naming
     renames = {
         "type": "climbing_type",
         "difficulty_grade": "climbing_grade",
@@ -28,11 +47,9 @@ def parquet_to_csv_crag(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
     }
     df = df.rename(columns=renames)
 
-    # 2) Ensure crag_name exists (if your upstream kept it as 'name')
     if "crag_name" not in df.columns and "name" in df.columns:
         df["crag_name"] = df["name"]
 
-    # 3) Column order MUST match dimroutes
     cols = [
         "crag_name",
         "route_name",
@@ -48,56 +65,48 @@ def parquet_to_csv_crag(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
         "county",
     ]
 
-    # 4) Trim/clean strings
     for c in ("crag_name","route_name","climbing_type","safety_grade","climbing_grade",
               "sector_name","rocktype","country","county"):
         if c in df.columns:
             df[c] = df[c].astype("string").str.strip()
 
-    # 5) Coerce numerics
     for c in ("longitude","latitude","route_count"):
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # 6) ENUM safety: coerce unknown climbing_type to NULL so COPY won't fail
-    CLIMB_ENUM = {'Bouldering','Trad','Sport','Top Rope','Winter','DWS','Scrambling','Mixed',
-                  'Boulder Circuit','Aid','Ice','Alpine','Via Ferrata'}
-    ROCK_ENUM  = {'Gritstone','Limestone','Sandstone (hard)','Granite','Grit (quarried)',
-                  'Sandstone (soft)','Rhyolite','UNKNOWN','Artificial','Culm','Slate',
-                  'Greenstone','Volcanic tuff','Dolerite','Andesite','Gabbro','Killas slate',
-                  'Mica schist','Shale','Pillow lava','Conglomerate','Chalk','Schist',
-                  'Amphibiolite & S','Welded Tuff','Quartzite','Crumbly rubbish','Hornstone',
-                  'Basalt','Diorites','Welsh igneous','Ice','Serpentine','Iron Rock',
-                  'Ignimbrite','Microgranite','Psammite'}
+    CLIMB_ENUM = {
+        "Bouldering","Trad","Sport","Top Rope","Winter","DWS","Scrambling","Mixed",
+        "Boulder Circuit","Aid","Ice","Alpine","Via Ferrata"
+    }
     if "climbing_type" in df.columns:
         bad = set(df["climbing_type"].dropna().unique()) - CLIMB_ENUM
-        if bad: print("Unknown climbing_type values:", bad)
-    if "rocktype" in df.columns:
-        bad = set(df["rocktype"].dropna().unique()) - ROCK_ENUM
-        if bad: print("Unknown rocktype values:", bad)
+        if bad:
+            print(" Unknown climbing_type values:", bad)
+            df.loc[~df["climbing_type"].isin(CLIMB_ENUM), "climbing_type"] = pd.NA
 
-
-
-    # 7) Validate required columns
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError(f"crag_df missing columns for dimroutes: {missing}")
 
-    # 8) Reorder and write CSV to GCS (no header; NULL -> \N)
     df = df.loc[:, cols]
     _write_csv_gcs(df, csv_gs_uri, header=False, na_rep="\\N")
-
     return cols
 
 def parquet_to_csv_weather(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
-    df = read_parquet(parquet_gs_uri)
+    """
+    Read cleaned_weather_df parquet from GCS, normalize types/order, and write CSV (no header) to GCS.
+    """
+    df = read_parquet(parquet_gs_uri).copy()
 
     cols = [
-        "date","precipitation_percentage","temperature_c",
-        "longitude","latitude","relative_humidity_percentage"
+        "date",
+        "precipitation_percentage",
+        "temperature_c",
+        "longitude",
+        "latitude",
+        "relative_humidity_percentage",
     ]
 
-    # Normalize types
     if "date" in df.columns:
         dt = pd.to_datetime(df["date"], utc=True, errors="coerce")
         df["date"] = dt.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -115,64 +124,31 @@ def parquet_to_csv_weather(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
         raise ValueError(f"weather_df missing columns: {missing}")
 
     df = df.loc[:, cols]
-    _write_csv_gcs(df, csv_gs_uri)
+    _write_csv_gcs(df, csv_gs_uri, header=False, na_rep="\\N")
     return cols
 
-def copy_csv_to_table_from_gcs(csv_gs_uri: str, table: str, columns: list[str]) -> int:
-    cols = ", ".join([f'"{c}"' for c in columns])
-    copy_sql = f"""
-        COPY {table} ({cols})
-        FROM STDIN WITH (FORMAT csv, DELIMITER ',', NULL '\\N', QUOTE '\"')
-    """
-    with connect(DATABASE_URL) as conn, conn.cursor() as cur, fsspec.open(csv_gs_uri, "rb") as f:
-        with cur.copy(copy_sql) as cp:
-            for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                cp.write(chunk)
-        conn.commit()
-        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
-        n = cur.fetchone()[0]
-        return n
-    
-def load_routes_from_gcs(crag_parquet_gs: str, csv_gs_uri: str) -> int:
-    """
-    One-time (or occasional) loader for routes:
-      - TRUNCATE dimroutes
-      - COPY fresh snapshot
-    Returns number of rows in dimroutes after load.
-    """
+
+def load_from_gcs(
+    crag_parquet_gs,weather_parquet_gs, csv_archive_prefix):
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
 
-    cols = parquet_to_csv_crag(crag_parquet_gs, csv_gs_uri)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    crag_csv_gs    = gcs_url(csv_archive_prefix, f"crag_load_{ts}.csv")
+    weather_csv_gs = gcs_url(csv_archive_prefix, f"weather_load_{ts}.csv")
+
+    crag_cols = parquet_to_csv_crag(crag_parquet_gs, crag_csv_gs)
+    wx_cols   = parquet_to_csv_weather(weather_parquet_gs, weather_csv_gs)
 
     with connect(DATABASE_URL) as conn, conn.cursor() as cur:
+        cur.execute(f"TRUNCATE {TABLE_FACT};")
+        cur.execute(f"TRUNCATE {TABLE_WEATHER};")
         cur.execute(f"TRUNCATE {TABLE_ROUTES};")
         conn.commit()
 
-    n_routes = copy_csv_to_table_from_gcs(csv_gs_uri, TABLE_ROUTES, cols)
-    print(f"✅ dimroutes reloaded: {n_routes}")
-    return n_routes
+    routes_rows  = _copy_csv_to_table_from_gcs(crag_csv_gs,    TABLE_ROUTES,  crag_cols)
+    weather_rows = _copy_csv_to_table_from_gcs(weather_csv_gs, TABLE_WEATHER, wx_cols)
 
-
-def load_weather_snapshot_from_gcs(weather_parquet_gs: str, csv_gs_uri: str) -> dict:
-    """
-    Fully replace weather + fact each run. Routes remain untouched.
-    """
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL not set")
-
-    weather_cols = parquet_to_csv_weather(weather_parquet_gs, csv_gs_uri)
-
-    with connect(DATABASE_URL) as conn, conn.cursor() as cur:
-        # Replace weather & fact
-        cur.execute(f"TRUNCATE {TABLE_FACT};")
-        cur.execute(f"TRUNCATE {TABLE_WEATHER};")
-        conn.commit()
-
-    # COPY fresh weather snapshot
-    n_weather = copy_csv_to_table_from_gcs(csv_gs_uri, TABLE_WEATHER, weather_cols)
-
-    # Rebuild fact by joining to static routes
     with connect(DATABASE_URL) as conn, conn.cursor() as cur:
         cur.execute(f"""
             INSERT INTO {TABLE_FACT} (
@@ -191,7 +167,15 @@ def load_weather_snapshot_from_gcs(weather_parquet_gs: str, csv_gs_uri: str) -> 
               ON ROUND(w.latitude::numeric,  4) = ROUND(r.latitude::numeric,  4)
              AND ROUND(w.longitude::numeric, 4) = ROUND(r.longitude::numeric, 4);
         """)
-        n_fact = cur.rowcount
+        fact_rows = cur.rowcount
         conn.commit()
 
-    return {"weather_rows": n_weather, "fact_rows": n_fact}
+    print(f"dimroutes: {routes_rows} | dimhourlyweatherinfo: {weather_rows} | fact: {fact_rows}")
+    return {
+        "routes_rows": routes_rows,
+        "weather_rows": weather_rows,
+        "fact_rows": fact_rows,
+        "crag_csv_gs": crag_csv_gs,
+        "weather_csv_gs": weather_csv_gs,
+    }
+
