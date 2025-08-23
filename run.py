@@ -6,6 +6,8 @@ from modules.clean import clean as clean_crag
 from modules.fetch_weather_data import fetch_weather_data
 from modules.clean_weather_data import clean_weather_data
 from modules.load import load_from_gcs
+from modules.load import load_weather_snapshot_from_gcs
+
 
 # Setting up GCS file pathways 
 
@@ -58,10 +60,9 @@ def main():
         dst_blob="cleaned/weather/cleaned_weather_df.parquet",
     )
 
-    load_from_gcs (
-    crag_parquet_gs    = gcs_url("cleaned","crag","crag_df.parquet"),
+    load_weather_snapshot_from_gcs(
     weather_parquet_gs = gcs_url("cleaned","weather","cleaned_weather_df.parquet"),
-    csv_archive_prefix = "archive/csv"   
+    csv_gs_uri         = gcs_url("load","weather_load.csv"), 
 )
 
 if __name__ == "__main__":
