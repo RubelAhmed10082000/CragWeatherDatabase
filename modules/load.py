@@ -10,6 +10,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 TABLE_ROUTES  = "dimroutes"
 TABLE_WEATHER = "dimhourlyweatherinfo"
 TABLE_FACT    = "fact_hourlyrouteweather"
+STG_WEATHER_ROUTE = "stg_weather_route"
+
 
 
 def _write_csv_gcs(df: pd.DataFrame, gs_uri: str, *, header=False, na_rep="\\N") -> None:
@@ -187,8 +189,6 @@ def load_weather_snapshot_from_gcs(
 ) -> dict:
     """
     Hourly snapshot: replace weather + fact, leave routes as-is.
-
-    Returns counts for logging.
     """
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
@@ -199,30 +199,35 @@ def load_weather_snapshot_from_gcs(
         cur.execute(f"TRUNCATE {TABLE_FACT}, {TABLE_WEATHER} RESTART IDENTITY;")
         conn.commit()
 
-    n_weather = _copy_csv_to_table_from_gcs(csv_gs_uri, TABLE_WEATHER, w_cols)
+    n_stg = _copy_csv_to_table_from_gcs(csv_gs_uri, STG_WEATHER_ROUTE, w_cols)
+
+    with connect(DATABASE_URL) as conn, conn.cursor() as cur:
+        cur.execute("SELECT upsert_weather_from_staging();")
+        n_weather = cur.fetchone()[0]
+        conn.commit()
+
 
     with connect(DATABASE_URL) as conn, conn.cursor() as cur:
         cur.execute(f"""
             INSERT INTO {TABLE_FACT} (
-              crag_name, route_id, weather_id, date,
+              crag_id, crag_name, route_id, date,
               relative_humidity_percentage, temperature_c, precipitation_percentage
             )
             SELECT 
+              w.crag_id,
               r.crag_name,
               r.route_id,
-              w.weather_id,
               w.date,
               w.relative_humidity_percentage,
               w.temperature_c,
-              w.precipitation_percentage
+              w.precipitation_percentage                                          
             FROM {TABLE_WEATHER} w
             JOIN {TABLE_ROUTES}  r
-              ON ROUND(w.latitude::numeric,  4) = ROUND(r.latitude::numeric,  4)
-             AND ROUND(w.longitude::numeric, 4) = ROUND(r.longitude::numeric, 4);
+              ON ROUND(w.latitude::numeric,  6) = ROUND(r.latitude::numeric,  6)
+             AND ROUND(w.longitude::numeric, 6) = ROUND(r.longitude::numeric, 6);
         """)
         n_fact = cur.rowcount
         conn.commit()
 
-    print(f"weather replaced: {n_weather} | fact rebuilt: {n_fact}")
+    print(f"staged: {n_stg} | weather upserted: {n_weather} | fact rebuilt: {n_fact}")
     return {"weather_rows": n_weather, "fact_rows": n_fact}
-
