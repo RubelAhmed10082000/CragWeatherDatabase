@@ -2,7 +2,7 @@ import sys, os
 from datetime import datetime, timezone
 import argparse
 import pandas as pd
-
+from jobs.weather_updater.app import db
 from jobs.weather_updater.app.db import (
     ensure_weather_table,
     ensure_staging_exists,  
@@ -15,8 +15,7 @@ from jobs.weather_updater.app.db import (
     log_run_finish,
 )
 
-import jobs.weather_updater.app.db as db_mod
-print("db module file =", db_mod.__file__)
+
 
 
 EXPECTED_COLS = [
@@ -35,14 +34,6 @@ def parse_args():
     p.add_argument("--retention-days", type=int, default=7, help="Delete staging rows older than N days (default: 7)")
     return p.parse_args()
 
-from jobs.weather_updater.app import db
-with db.get_conn() as conn, conn.cursor() as cur:
-    cur.execute("select current_user, current_database(), current_schema(), version()")
-    print("DB=", cur.fetchone())
-    cur.execute("select table_schema, table_name from information_schema.tables where table_name='stg_weather_route'")
-    print("stg table(s)=", cur.fetchall())
-    cur.execute("select column_name, data_type from information_schema.columns where table_name='stg_weather_route' order by ordinal_position")
-    print("stg cols=", cur.fetchall())
 
 def main():
     args = parse_args()
