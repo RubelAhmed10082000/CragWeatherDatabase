@@ -13,7 +13,6 @@ from jobs.weather_updater.app.db import (
 
 )
 
-
 def main():
     if len(sys.argv) < 2:
         print("Usage: python -m jobs.weather_updater.run_parquet path/to/weather.parquet [dp]")

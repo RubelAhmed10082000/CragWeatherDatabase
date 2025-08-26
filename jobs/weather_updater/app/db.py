@@ -205,3 +205,84 @@ def count_unmatched_staging(dp: int = 5) -> int:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(q)
         return cur.fetchone()["n"]
+    
+def merge_batch(load_batch_id: str, dp: int = 6) -> int:
+    dp = int(dp)
+    sql = f"""
+    WITH src AS (
+      SELECT DISTINCT ON (c.crag_id, s.date)
+        c.crag_id,
+        s.date,
+        s.latitude,
+        s.longitude,
+        s.temperature_c,
+        s.precipitation_percentage,
+        s.relative_humidity_percentage
+      FROM public.stg_weather_route s
+      JOIN public.dimcrags c
+        ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric,  {dp})
+       AND round(c.longitude::numeric, {dp}) = round(s.longitude::numeric, {dp})
+      WHERE s.load_batch_id = %(batch)s
+      ORDER BY c.crag_id, s.date, s.load_ts DESC
+    )
+    INSERT INTO public.dimhourlyweatherinfo AS d (
+      crag_id, date, latitude, longitude,
+      temperature_c, precipitation_percentage, relative_humidity_percentage
+    )
+    SELECT * FROM src
+    ON CONFLICT (crag_id, date) DO UPDATE SET
+      latitude                     = EXCLUDED.latitude,
+      longitude                    = EXCLUDED.longitude,
+      temperature_c                = EXCLUDED.temperature_c,
+      precipitation_percentage     = EXCLUDED.precipitation_percentage,
+      relative_humidity_percentage = EXCLUDED.relative_humidity_percentage
+    RETURNING 1;
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(sql, {"batch": load_batch_id})
+        rows = cur.fetchall()
+        conn.commit()
+        return len(rows)
+
+def delete_staging_batch(load_batch_id: str) -> int:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM public.stg_weather_route WHERE load_batch_id = %(b)s",
+            {"b": load_batch_id},
+        )
+        deleted = cur.rowcount
+        conn.commit()
+        return deleted
+    
+def log_run_start(load_batch_id: str, dp: int) -> int:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+          INSERT INTO public.weather_load_runs (load_batch_id, dp, status)
+          VALUES (%s, %s, 'running') RETURNING id
+        """, (load_batch_id, dp))
+        run_id = cur.fetchone()["id"]
+        conn.commit()
+        return run_id
+
+def log_run_finish(run_id: int, staged: int, unmatched: int, upserted: int, status: str = "success"):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+          UPDATE public.weather_load_runs
+             SET finished_at = now(),
+                 staged_count = %s,
+                 unmatched_count = %s,
+                 upserted_count = %s,
+                 status = %s
+           WHERE id = %s
+        """, (staged, unmatched, upserted, status, run_id))
+        conn.commit()
+
+def delete_old_staging(days: int = 7) -> int:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM public.stg_weather_route WHERE load_ts < now() - interval %s",
+            (f"{int(days)} days",),
+        )
+        n = cur.rowcount
+        conn.commit()
+        return n
