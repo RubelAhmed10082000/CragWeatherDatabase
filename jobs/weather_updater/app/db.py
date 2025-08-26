@@ -165,5 +165,5 @@ def merge_staging_into_weather() -> int:
 
 def truncate_staging() -> None:
     with get_conn() as conn, conn.cursor() as cur:
-        cur.exectute("TRUNCATE TABLE public.stg_weather_route")
+        cur.execute("TRUNCATE TABLE public.stg_weather_route")
         conn.commit
