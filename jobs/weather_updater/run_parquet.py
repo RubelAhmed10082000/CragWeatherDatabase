@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import argparse
 import pandas as pd
 from jobs.weather_updater.app import db
+from jobs.weather_updater.app.db import get_connection
 from jobs.weather_updater.app.db import (
     ensure_weather_table,
     ensure_staging_exists,  
@@ -58,7 +59,7 @@ def main():
 
     try:
         staged = load_to_staging(rows, load_batch_id=batch_id)
-        with db.get_conn() as conn, conn.cursor() as cur:
+        with get_connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) AS n FROM public.stg_weather_route")
             print("Total rows now in staging:", cur.fetchone()["n"])
 
@@ -79,7 +80,9 @@ def main():
         unmatched = count_unmatched_staging(dp=args.dp, load_batch_id=batch_id)
         print("Unmatched rows (this batch):", unmatched)
 
-        upserted = merge_batch(batch_id, dp=args.dp)
+        with get_connection() as conn, conn.cursor() as cur:
+            upserted = db.upsert_dim_hourly(cur, dp=args.dp, batch_id=batch_id)
+            conn.commit()
         print(f"Upserted rows: {upserted}")
 
         deleted = delete_staging_batch(batch_id)

@@ -8,7 +8,7 @@ import math
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-def get_conn():
+def get_connection():
     """
     Connecting to PostgreSQL database
     """
@@ -32,7 +32,7 @@ def fetch_crag_ids_for_shard(total_shards: int, shard_index: int, limit:int|None
         q += " LIMIT %(limit)s"
         params["limit"] = limit
 
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(q, params)
         return [r["crag_id"] for r in cur.fetchall()]
     
@@ -44,7 +44,7 @@ def fetch_coords_for_crags(crag_ids: Iterable[int]) -> dict[int, tuple[float,flo
     ids = list(crag_ids)
     if not ids:
         return {}
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
         SELECT crag_id, latitude AS lat, longitude AS lon
         FROM dimcrags
@@ -85,7 +85,7 @@ def ensure_weather_table():
     CREATE INDEX IF NOT EXISTS dimhourlyweatherinfo_lat_lon_idx
       ON dimhourlyweatherinfo (latitude, longitude);
     """
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(ddl)
         conn.commit()
 
@@ -112,7 +112,7 @@ def ensure_staging_exists():
     CREATE INDEX IF NOT EXISTS stg_latlon6_idx
       ON public.stg_weather_route (round(latitude::numeric,6), round(longitude::numeric,6));
     """
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(ddl)
         conn.commit()
 
@@ -168,7 +168,7 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batc
         writer.writerow([_clean(r.get(c)) for c in cols])
     buf.seek(0)
 
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         copy_sql = (
             "COPY public.stg_weather_route (" + ", ".join(cols) + ") "
             "FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '')"
@@ -179,47 +179,46 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batc
 
     return len(normalized)
     
-def merge_staging_into_weather(dp: int = 5) -> int:
-    merge_sql = f"""
-    WITH src AS(
-    SELECT DISTINCT ON (c.crag_id, s.date)
-      c.crag_id,
-      s.date,
-      s.latitude,
-      s.longitude,
-      s.temperature_c,
-      s.precipitation_percentage,
-      s.relative_humidity_percentage
+def merge_batch(load_batch_id: str, dp: int) -> int:
+    """
+    Upsert from staging into dimhourlyweatherinfo, tagging lineage columns.
+    """
+    sql = """
+    INSERT INTO public.dimhourlyweatherinfo AS d (
+      crag_id, date, precipitation_percentage, temperature_c,
+      longitude, latitude, relative_humidity_percentage,
+      load_batch_id, load_ts, last_updated_ts
+    )
+    SELECT
+      c.crag_id, s.date, s.precipitation_percentage, s.temperature_c,
+      s.longitude, s.latitude, s.relative_humidity_percentage,
+      s.load_batch_id,
+      now() AS load_ts,
+      now() AS last_updated_ts
     FROM public.stg_weather_route s
     JOIN public.dimcrags c
-    ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric, {dp})
-    AND round(c.longitude::numeric,  {dp}) = round(s.longitude::numeric, {dp})
-    ORDER BY c.crag_id, s.date, s.load_ts DESC
-    )
-    INSERT INTO public.dimhourlyweatherinfo AS d (
-          crag_id, date, latitude, longitude,
-          temperature_c, precipitation_percentage, relative_humidity_percentage
-        )
-        SELECT
-          crag_id, date, latitude, longitude,
-          temperature_c, precipitation_percentage, relative_humidity_percentage
-        FROM src
-        ON CONFLICT (crag_id, date) DO UPDATE SET
-          latitude                     = EXCLUDED.latitude,
-          longitude                    = EXCLUDED.longitude,
-          temperature_c                = EXCLUDED.temperature_c,
-          precipitation_percentage     = EXCLUDED.precipitation_percentage,
-          relative_humidity_percentage = EXCLUDED.relative_humidity_percentage
-        RETURNING 1;
+      ON round(c.latitude::numeric, %s)  = round(s.latitude::numeric, %s)
+     AND round(c.longitude::numeric, %s) = round(s.longitude::numeric, %s)
+    WHERE s.load_batch_id = %s
+    ON CONFLICT (crag_id, date)
+    DO UPDATE SET
+      precipitation_percentage     = EXCLUDED.precipitation_percentage,
+      temperature_c                = EXCLUDED.temperature_c,
+      relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
+      longitude                    = EXCLUDED.longitude,
+      latitude                     = EXCLUDED.latitude,
+      load_batch_id                = EXCLUDED.load_batch_id,  -- tag latest batch
+      load_ts                      = d.load_ts,               -- keep first-seen
+      last_updated_ts              = NOW();                   -- mark update
     """
-    with get_conn() as conn, conn.cursor() as cur:
-            cur.execute(merge_sql)
-            affected = len(cur.fetchall())
-            conn.commit()
-            return affected
-
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, (dp, dp, dp, dp, load_batch_id))
+        affected = cur.rowcount
+        conn.commit()
+        return affected
+    
 def truncate_staging() -> None:
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE TABLE public.stg_weather_route")
         conn.commit()
 
@@ -241,11 +240,11 @@ def count_unmatched_staging(dp: int = 6, load_batch_id: str | None = None) -> in
     )
     SELECT COUNT(*) AS n FROM joined WHERE crag_id IS NULL;
     """
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(q, params)
         return cur.fetchone()["n"]
     
-def merge_batch(load_batch_id: str, dp: int = 6) -> int:
+def merge_batch_old(load_batch_id: str, dp: int = 6) -> int:
     dp = int(dp)
     sql = f"""
     WITH src AS (
@@ -277,14 +276,14 @@ def merge_batch(load_batch_id: str, dp: int = 6) -> int:
       relative_humidity_percentage = EXCLUDED.relative_humidity_percentage
     RETURNING 1;
     """
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, {"batch": load_batch_id})
         rows = cur.fetchall()
         conn.commit()
         return len(rows)
 
 def delete_staging_batch(load_batch_id: str) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "DELETE FROM public.stg_weather_route WHERE load_batch_id = %(b)s",
             {"b": load_batch_id},
@@ -294,7 +293,7 @@ def delete_staging_batch(load_batch_id: str) -> int:
         return deleted
     
 def log_run_start(load_batch_id: str, dp: int) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
           INSERT INTO public.weather_load_runs (load_batch_id, dp, status)
           VALUES (%s, %s, 'running') RETURNING id
@@ -304,7 +303,7 @@ def log_run_start(load_batch_id: str, dp: int) -> int:
         return run_id
 
 def log_run_finish(run_id: int, staged: int, unmatched: int, upserted: int, status: str = "success"):
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
           UPDATE public.weather_load_runs
              SET finished_at = now(),
@@ -317,7 +316,7 @@ def log_run_finish(run_id: int, staged: int, unmatched: int, upserted: int, stat
         conn.commit()
 
 def delete_old_staging(days: int = 7) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "DELETE FROM public.stg_weather_route WHERE load_ts < now() - interval %s",
             (f"{int(days)} days",),
@@ -333,7 +332,7 @@ def ensure_brin_index_on_weather_date_concurrent(pages_per_range: int = 128) -> 
       USING BRIN (date)
       WITH (pages_per_range = {int(pages_per_range)});
     """
-    with get_conn() as conn:
+    with get_connection() as conn:
         conn.autocommit = True          
         with conn.cursor() as cur:
             cur.execute(ddl)
@@ -342,7 +341,7 @@ def delete_old_staging(days: int = 7) -> int:
     """
     Delete staging rows older than N days. Returns number of rows deleted.
     """
-    with get_conn() as conn, conn.cursor() as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "DELETE FROM public.stg_weather_route WHERE load_ts < now() - (%s || ' days')::interval",
             (str(int(days)),),
@@ -350,3 +349,35 @@ def delete_old_staging(days: int = 7) -> int:
         deleted = cur.rowcount
         conn.commit()
         return deleted
+    
+def upsert_dim_hourly(cur, *, dp: int, batch_id: str) -> int:
+    sql = """
+    INSERT INTO public.dimhourlyweatherinfo AS d (
+      crag_id, date, precipitation_percentage, temperature_c,
+      longitude, latitude, relative_humidity_percentage,
+      load_batch_id, load_ts, last_updated_ts
+    )
+    SELECT
+      c.crag_id, s.date, s.precipitation_percentage, s.temperature_c,
+      s.longitude, s.latitude, s.relative_humidity_percentage,
+      s.load_batch_id,
+      now() AS load_ts,
+      now() AS last_updated_ts
+    FROM public.stg_weather_route s
+    JOIN public.dimcrags c
+      ON round(c.latitude::numeric, %s)  = round(s.latitude::numeric, %s)
+     AND round(c.longitude::numeric, %s) = round(s.longitude::numeric, %s)
+    WHERE s.load_batch_id = %s
+    ON CONFLICT (crag_id, date)
+    DO UPDATE SET
+      precipitation_percentage     = EXCLUDED.precipitation_percentage,
+      temperature_c                = EXCLUDED.temperature_c,
+      relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
+      longitude                    = EXCLUDED.longitude,
+      latitude                     = EXCLUDED.latitude,
+      load_batch_id                = EXCLUDED.load_batch_id,  -- tag the batch
+      load_ts                      = d.load_ts,               -- keep first-seen
+      last_updated_ts              = NOW();                   -- mark update
+    """
+    cur.execute(sql, (dp, dp, dp, dp, batch_id))
+    return cur.rowcount
