@@ -187,7 +187,7 @@ def merge_staging_into_weather(dp: int = 5) -> int:
 def truncate_staging() -> None:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE TABLE public.stg_weather_route")
-        conn.commit
+        conn.commit()
 
 def count_unmatched_staging(dp: int = 5) -> int:
     q = f"""
