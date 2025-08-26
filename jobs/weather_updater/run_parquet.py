@@ -1,49 +1,107 @@
-import sys
-import pandas as pd
+import sys, os
 from datetime import datetime, timezone
-import os
+import argparse
+import pandas as pd
 
 from jobs.weather_updater.app.db import (
     ensure_weather_table,
-    ensure_staging_exists,
-    load_to_staging,
-    merge_staging_into_weather,
-    truncate_staging,
-    count_unmatched_staging,
-
+    ensure_staging_exists,  
+    load_to_staging,          
+    merge_batch,              
+    delete_staging_batch,     
+    delete_old_staging,       
+    count_unmatched_staging,  
+    log_run_start,
+    log_run_finish,
 )
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python -m jobs.weather_updater.run_parquet path/to/weather.parquet [dp]")
-        sys.exit(1)
+import jobs.weather_updater.app.db as db_mod
+print("db module file =", db_mod.__file__)
 
-    parquet_path = sys.argv[1]
-    dp = int(sys.argv[2]) if len(sys.argv) > 2 else 6
+
+EXPECTED_COLS = [
+    "date",
+    "precipitation_percentage",
+    "temperature_c",
+    "longitude",
+    "latitude",
+    "relative_humidity_percentage",
+]
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Load weather parquet -> staging -> merge (batch-scoped).")
+    p.add_argument("parquet_path", help="Local path or gs:// URI to a parquet file")
+    p.add_argument("--dp", type=int, default=6, help="Rounding precision for lat/lon join (default: 6)")
+    p.add_argument("--retention-days", type=int, default=7, help="Delete staging rows older than N days (default: 7)")
+    return p.parse_args()
+
+from jobs.weather_updater.app import db
+with db.get_conn() as conn, conn.cursor() as cur:
+    cur.execute("select current_user, current_database(), current_schema(), version()")
+    print("DB=", cur.fetchone())
+    cur.execute("select table_schema, table_name from information_schema.tables where table_name='stg_weather_route'")
+    print("stg table(s)=", cur.fetchall())
+    cur.execute("select column_name, data_type from information_schema.columns where table_name='stg_weather_route' order by ordinal_position")
+    print("stg cols=", cur.fetchall())
+
+def main():
+    args = parse_args()
 
     ensure_weather_table()
     ensure_staging_exists()
 
-    # Load parquet into DataFrame
-    df = pd.read_parquet(parquet_path)
+    df = pd.read_parquet(args.parquet_path)
     if df["date"].dtype == "object":
         df["date"] = pd.to_datetime(df["date"], utc=True)
 
-    rows = df.to_dict(orient="records")
+    missing = [c for c in EXPECTED_COLS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Parquet missing columns: {missing}")
 
-    batch_id = f"{os.path.basename(parquet_path)}__{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    rows = df[EXPECTED_COLS].to_dict(orient="records")
 
-    staged = load_to_staging(rows, load_batch_id=batch_id)
-    print(f" Loaded {staged} rows into staging (batch_id={batch_id}).")
+    batch_id = f"{os.path.basename(args.parquet_path)}__{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    print(f"Batch ID: {batch_id}")
 
-    unmatched = count_unmatched_staging(dp=dp)
-    print(f"  Unmatched rows: {unmatched}")
+    run_id = log_run_start(batch_id, args.dp)
 
-    upserted = merge_staging_into_weather(dp=dp)
-    print(f"Upserted {upserted} rows into dimhourlyweatherinfo.")
+    try:
+        staged = load_to_staging(rows, load_batch_id=batch_id)
+        with db.get_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM public.stg_weather_route")
+            print("Total rows now in staging:", cur.fetchone()["n"])
 
-    truncate_staging()
-    print("Staging table truncated.")
+            cur.execute("""
+            SELECT COUNT(*) AS n
+            FROM public.stg_weather_route
+            WHERE load_ts > now() - interval '5 minutes'
+            """)
+            print("Rows inserted in last 5 minutes (any batch):", cur.fetchone()["n"])
+
+            cur.execute("""
+            SELECT load_batch_id, COUNT(*) AS n
+            FROM public.stg_weather_route
+            GROUP BY 1 ORDER BY n DESC LIMIT 5
+            """)
+            print("Top batch_ids present:", cur.fetchall())
+
+        unmatched = count_unmatched_staging(dp=args.dp, load_batch_id=batch_id)
+        print("Unmatched rows (this batch):", unmatched)
+
+        upserted = merge_batch(batch_id, dp=args.dp)
+        print(f"Upserted rows: {upserted}")
+
+        deleted = delete_staging_batch(batch_id)
+        print(f"Deleted staging rows for this batch: {deleted}")
+
+        pruned = delete_old_staging(days=args.retention_days)
+        print(f"Retention cleanup (> {args.retention_days} days): {pruned} rows removed")
+
+        log_run_finish(run_id, staged=staged, unmatched=unmatched, upserted=upserted, status="success")
+
+    except Exception as e:
+        log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status=f"failed: {e}")
+        raise
 
 if __name__ == "__main__":
     main()

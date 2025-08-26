@@ -4,6 +4,7 @@ import io
 from typing import Iterable, Sequence, Mapping, Any
 from psycopg import connect
 from psycopg.rows import dict_row
+import math
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
@@ -90,17 +91,25 @@ def ensure_weather_table():
 
 def ensure_staging_exists():
     """Ensure staging table + helpful indexes exist."""
-    ddl = """
+    ddl ="""
     CREATE TABLE IF NOT EXISTS public.stg_weather_route (
       date                          timestamptz,
       precipitation_percentage      real,
       temperature_c                 real,
       longitude                     double precision,
       latitude                      double precision,
-      relative_humidity_percentage  real
+      relative_humidity_percentage  real,
+      load_batch_id                 text,
+      load_ts                       timestamptz NOT NULL DEFAULT now()
     );
 
-    CREATE INDEX IF NOT EXISTS stg_latlon5_idx
+    CREATE INDEX IF NOT EXISTS stg_batch_idx
+      ON public.stg_weather_route (load_batch_id);
+
+    CREATE INDEX IF NOT EXISTS stg_loadts_idx
+      ON public.stg_weather_route (load_ts);
+
+    CREATE INDEX IF NOT EXISTS stg_latlon6_idx
       ON public.stg_weather_route (round(latitude::numeric,6), round(longitude::numeric,6));
     """
     with get_conn() as conn, conn.cursor() as cur:
@@ -108,10 +117,14 @@ def ensure_staging_exists():
         conn.commit()
 
 
+def _clean(v):
+    if v is None:
+        return ""
+    if isinstance(v, float) and math.isnan(v):
+        return ""
+    return v
+
 def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batch_id: str) -> int:
-    """
-    Bulk insert parquet rows into public.stg_weather_route using COPY.
-    """
     if not rows:
         return 0
 
@@ -150,13 +163,18 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batc
     ]
 
     buf = io.StringIO()
-    writer = csv.writer(buf, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
+    writer = csv.writer(buf, delimiter="\t", lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
     for r in normalized:
-        writer.writerow([r.get(c) for c in cols])
+        writer.writerow([_clean(r.get(c)) for c in cols])
     buf.seek(0)
 
     with get_conn() as conn, conn.cursor() as cur:
-        cur.copy(f"COPY public.stg_weather_route ({', '.join(cols)}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t')", buf)
+        copy_sql = (
+            "COPY public.stg_weather_route (" + ", ".join(cols) + ") "
+            "FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '')"
+        )
+        with cur.copy(copy_sql) as cp:
+            cp.write(buf.getvalue())
         conn.commit()
 
     return len(normalized)
@@ -205,17 +223,26 @@ def truncate_staging() -> None:
         cur.execute("TRUNCATE TABLE public.stg_weather_route")
         conn.commit()
 
-def count_unmatched_staging(dp: int = 5) -> int:
+def count_unmatched_staging(dp: int = 6, load_batch_id: str | None = None) -> int:
+    params = {}
+    where_batch = ""
+    if load_batch_id:
+        where_batch = "WHERE s.load_batch_id = %(batch)s"
+        params["batch"] = load_batch_id
+
     q = f"""
-    SELECT count(*) AS n
-    FROM public.stg_weather_route s
-    LEFT JOIN public.dimcrags c
-      ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric,  {dp})
-     AND round(c.longitude::numeric, {dp}) = round(s.longitude::numeric, {dp})
-    WHERE c.crag_id IS NULL
+    WITH joined AS (
+      SELECT s.*, c.crag_id
+      FROM public.stg_weather_route s
+      LEFT JOIN public.dimcrags c
+        ON round(c.latitude::numeric,{dp})  = round(s.latitude::numeric,{dp})
+       AND round(c.longitude::numeric,{dp}) = round(s.longitude::numeric,{dp})
+      {where_batch}
+    )
+    SELECT COUNT(*) AS n FROM joined WHERE crag_id IS NULL;
     """
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(q)
+        cur.execute(q, params)
         return cur.fetchone()["n"]
     
 def merge_batch(load_batch_id: str, dp: int = 6) -> int:
