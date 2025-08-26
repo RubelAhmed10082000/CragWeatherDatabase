@@ -2,6 +2,7 @@ import os
 from typing import Iterable, Sequence, Mapping, Any
 from psycopg import connect, sql
 from psycopg.rows import dict_row
+from psycopg import execute_values
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
@@ -87,6 +88,82 @@ def ensure_weather_table():
         cur.execute(ddl)
         conn.commit()
 
+_STAGING_COLS = (
+    "date",
+    "precipitation_percentage",
+    "temperature_c",
+    "longitude",
+    "latitude",
+    "relative_humidity_percentage",
+)
 
+def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
+    """
+    Insert parquet rows into public.stg_weather_route.
+    """
+    if not rows:
+        return 0
 
+    def norm(r):
+        if isinstance(r, Mapping):
+            return (
+                r["date"],
+                r.get("precipitation_percentage"),
+                r.get("temperature_c"),
+                r["longitude"],
+                r["latitude"],
+                r.get("relative_humidity_percentage"),
+            )
+        # positional: date, precip, temp, lon, lat, rh
+        return tuple(r)
 
+    values = [norm(r) for r in rows]
+
+    insert_sql = sql.SQL("""
+        INSERT INTO public.stg_weather_route ({cols})
+        VALUES %s
+    """).format(cols=sql.SQL(", ").join(sql.Identifier(c) for c in _STAGING_COLS))
+
+    with get_conn() as conn, conn.cursor() as cur:
+        execute_values(cur, insert_sql.as_string(conn), values, page_size=2000)
+        conn.commit()
+        return len(values)
+    
+def merge_staging_into_weather() -> int:
+    merge_sql = """
+    WITH src AS(
+    SELECT
+      c.crag_id
+      s.date,
+      s.latitude,
+      s.longitude,
+      s.temperature_c,
+      s.precipitation_percentage,
+      s.relative_humidity_percentage,
+    FROM public.stg_weather_route s
+    JOIN public.dimcrags c
+    ON c.latitude = s.latitude
+    AND c.longitude = s.longitude
+    )
+    SELECT 
+      crag_id, date, latitude, longitude,
+      temperature_c, precipitation_percentage, relative_humidity_percentage
+      FROM src
+      ON CONFLICT (crag_id, date) DO UPDATE SET
+      latitude                     = EXCLUDED.latitude,
+          longitude                    = EXCLUDED.longitude,
+          temperature_c                = EXCLUDED.temperature_c,
+          precipitation_percentage     = EXCLUDED.precipitation_percentage,
+          relative_humidity_percentage = EXCLUDED.relative_humidity_percentage
+        RETURNING 1;
+"""
+    with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(merge_sql)
+            affected = len(cur.fetchall())
+            conn.commit()
+            return affected
+
+def truncate_staging() -> None:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.exectute("TRUNCATE TABLE public.stg_weather_route")
+        conn.commit
