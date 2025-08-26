@@ -310,3 +310,16 @@ def ensure_brin_index_on_weather_date_concurrent(pages_per_range: int = 128) -> 
         conn.autocommit = True          
         with conn.cursor() as cur:
             cur.execute(ddl)
+
+def delete_old_staging(days: int = 7) -> int:
+    """
+    Delete staging rows older than N days. Returns number of rows deleted.
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM public.stg_weather_route WHERE load_ts < now() - (%s || ' days')::interval",
+            (str(int(days)),),
+        )
+        deleted = cur.rowcount
+        conn.commit()
+        return deleted
