@@ -1,4 +1,6 @@
 import os
+import csv
+import io
 from typing import Iterable, Sequence, Mapping, Any
 from psycopg import connect
 from psycopg.rows import dict_row
@@ -108,7 +110,7 @@ def ensure_staging_exists():
 
 def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batch_id: str) -> int:
     """
-    Insert parquet rows into public.stg_weather_route.
+    Bulk insert parquet rows into public.stg_weather_route using COPY.
     """
     if not rows:
         return 0
@@ -135,19 +137,29 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batc
             "load_batch_id": load_batch_id,
         }
 
-    params = [to_mapping(r) for r in rows]
+    normalized = [to_mapping(r) for r in rows]
 
-    insert_sql = """
-        INSERT INTO public.stg_weather_route
-          (date, precipitation_percentage, temperature_c, longitude, latitude, relative_humidity_percentage, load_batch_id)
-        VALUES
-          (%(date)s, %(precipitation_percentage)s, %(temperature_c)s, %(longitude)s, %(latitude)s, %(relative_humidity_percentage)s, %(load_batch_id)s)
-    """
+    cols = [
+        "date",
+        "precipitation_percentage",
+        "temperature_c",
+        "longitude",
+        "latitude",
+        "relative_humidity_percentage",
+        "load_batch_id",
+    ]
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
+    for r in normalized:
+        writer.writerow([r.get(c) for c in cols])
+    buf.seek(0)
 
     with get_conn() as conn, conn.cursor() as cur:
-        cur.executemany(insert_sql, params)
+        cur.copy(f"COPY public.stg_weather_route ({', '.join(cols)}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t')", buf)
         conn.commit()
-        return len(params)
+
+    return len(normalized)
     
 def merge_staging_into_weather(dp: int = 5) -> int:
     merge_sql = f"""
@@ -286,3 +298,15 @@ def delete_old_staging(days: int = 7) -> int:
         n = cur.rowcount
         conn.commit()
         return n
+
+def ensure_brin_index_on_weather_date_concurrent(pages_per_range: int = 128) -> None:
+    ddl = f"""
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS dimhourlyweatherinfo_date_brin
+      ON public.dimhourlyweatherinfo
+      USING BRIN (date)
+      WITH (pages_per_range = {int(pages_per_range)});
+    """
+    with get_conn() as conn:
+        conn.autocommit = True          
+        with conn.cursor() as cur:
+            cur.execute(ddl)
