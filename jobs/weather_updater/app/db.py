@@ -97,7 +97,7 @@ def ensure_staging_exists():
     );
 
     CREATE INDEX IF NOT EXISTS stg_latlon5_idx
-      ON public.stg_weather_route (round(latitude::numeric,5), round(longitude::numeric,5));
+      ON public.stg_weather_route (round(latitude::numeric,6), round(longitude::numeric,6));
     """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(ddl)
