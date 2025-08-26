@@ -2,7 +2,6 @@ import os
 from typing import Iterable, Sequence, Mapping, Any
 from psycopg import connect, sql
 from psycopg.rows import dict_row
-from psycopg import execute_values
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
@@ -69,11 +68,8 @@ def ensure_weather_table():
       CONSTRAINT pk_dimhourlyweatherinfo PRIMARY KEY (crag_id, date),
       CONSTRAINT fk_dimhourlyweatherinfo_crag
         FOREIGN KEY (crag_id) REFERENCES dimcrags(crag_id)
-        ON UPDATE CASCADE ON DELETE CASCADE
+        ON UPDATE CASCADE ON DELETE NO ACTION
     );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS dimhourlyweatherinfo_crag_date_uniq_idx
-      ON dimhourlyweatherinfo (crag_id, date);
 
     CREATE INDEX IF NOT EXISTS dimhourlyweatherinfo_date_idx
       ON dimhourlyweatherinfo (date);
@@ -88,14 +84,6 @@ def ensure_weather_table():
         cur.execute(ddl)
         conn.commit()
 
-_STAGING_COLS = (
-    "date",
-    "precipitation_percentage",
-    "temperature_c",
-    "longitude",
-    "latitude",
-    "relative_humidity_percentage",
-)
 
 def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
     """
@@ -104,59 +92,72 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
     if not rows:
         return 0
 
-    def norm(r):
+    def to_mapping(r) -> Mapping[str, Any]:
         if isinstance(r, Mapping):
-            return (
-                r["date"],
-                r.get("precipitation_percentage"),
-                r.get("temperature_c"),
-                r["longitude"],
-                r["latitude"],
-                r.get("relative_humidity_percentage"),
-            )
-        # positional: date, precip, temp, lon, lat, rh
-        return tuple(r)
+            return {
+                "date": r["date"],
+                "precipitation_percentage": r.get("precipitation_percentage"),
+                "temperature_c": r.get("temperature_c"),
+                "longitude": r["longitude"],
+                "latitude": r["latitude"],
+                "relative_humidity_percentage": r.get("relative_humidity_percentage"),
+            }
+        date, precip, temp, lon, lat, rh = r
+        return {
+            "date": date,
+            "precipitation_percentage": precip,
+            "temperature_c": temp,
+            "longitude": lon,
+            "latitude": lat,
+            "relative_humidity_percentage": rh,
+        }
 
-    values = [norm(r) for r in rows]
+    params = [to_mapping(r) for r in rows]
 
-    insert_sql = sql.SQL("""
-        INSERT INTO public.stg_weather_route ({cols})
-        VALUES %s
-    """).format(cols=sql.SQL(", ").join(sql.Identifier(c) for c in _STAGING_COLS))
+    insert_sql = """
+        INSERT INTO public.stg_weather_route
+          (date, precipitation_percentage, temperature_c, longitude, latitude, relative_humidity_percentage)
+        VALUES
+          (%(date)s, %(precipitation_percentage)s, %(temperature_c)s, %(longitude)s, %(latitude)s, %(relative_humidity_percentage)s)
+    """
 
     with get_conn() as conn, conn.cursor() as cur:
-        execute_values(cur, insert_sql.as_string(conn), values, page_size=2000)
+        cur.executemany(insert_sql, params)
         conn.commit()
-        return len(values)
+        return len(params)
     
-def merge_staging_into_weather() -> int:
-    merge_sql = """
+def merge_staging_into_weather(dp: int = 5) -> int:
+    merge_sql = f"""
     WITH src AS(
     SELECT
-      c.crag_id
+      c.crag_id,
       s.date,
       s.latitude,
       s.longitude,
       s.temperature_c,
       s.precipitation_percentage,
-      s.relative_humidity_percentage,
+      s.relative_humidity_percentage
     FROM public.stg_weather_route s
     JOIN public.dimcrags c
-    ON c.latitude = s.latitude
-    AND c.longitude = s.longitude
+    ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric, {dp})
+    AND round(c.longitude::numeric,  {dp}) = round(s.longitude::numeric, {dp})
     )
-    SELECT 
-      crag_id, date, latitude, longitude,
-      temperature_c, precipitation_percentage, relative_humidity_percentage
-      FROM src
-      ON CONFLICT (crag_id, date) DO UPDATE SET
-      latitude                     = EXCLUDED.latitude,
+    INSERT INTO public.dimhourlyweatherinfo AS d (
+          crag_id, date, latitude, longitude,
+          temperature_c, precipitation_percentage, relative_humidity_percentage
+        )
+        SELECT
+          crag_id, date, latitude, longitude,
+          temperature_c, precipitation_percentage, relative_humidity_percentage
+        FROM src
+        ON CONFLICT (crag_id, date) DO UPDATE SET
+          latitude                     = EXCLUDED.latitude,
           longitude                    = EXCLUDED.longitude,
           temperature_c                = EXCLUDED.temperature_c,
           precipitation_percentage     = EXCLUDED.precipitation_percentage,
           relative_humidity_percentage = EXCLUDED.relative_humidity_percentage
         RETURNING 1;
-"""
+    """
     with get_conn() as conn, conn.cursor() as cur:
             cur.execute(merge_sql)
             affected = len(cur.fetchall())
