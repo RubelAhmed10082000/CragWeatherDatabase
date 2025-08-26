@@ -1,6 +1,6 @@
 import os
 from typing import Iterable, Sequence, Mapping, Any
-from psycopg import connect, sql
+from psycopg import connect
 from psycopg.rows import dict_row
 
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -13,7 +13,7 @@ def get_conn():
 
 def fetch_crag_ids_for_shard(total_shards: int, shard_index: int, limit:int|None=None) -> list[int]:
     """
-    Assing work by crag_id % of total shards
+    Assign work by crag_id % of total shards
     """
 
     q ="""
@@ -84,6 +84,25 @@ def ensure_weather_table():
         cur.execute(ddl)
         conn.commit()
 
+def ensure_staging_exists():
+    """Ensure staging table + helpful indexes exist."""
+    ddl = """
+    CREATE TABLE IF NOT EXISTS public.stg_weather_route (
+      date                          timestamptz,
+      precipitation_percentage      real,
+      temperature_c                 real,
+      longitude                     double precision,
+      latitude                      double precision,
+      relative_humidity_percentage  real
+    );
+
+    CREATE INDEX IF NOT EXISTS stg_latlon5_idx
+      ON public.stg_weather_route (round(latitude::numeric,5), round(longitude::numeric,5));
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(ddl)
+        conn.commit()
+
 
 def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
     """
@@ -129,7 +148,7 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
 def merge_staging_into_weather(dp: int = 5) -> int:
     merge_sql = f"""
     WITH src AS(
-    SELECT
+    SELECT DISTINCT ON (c.crag_id, s.date)
       c.crag_id,
       s.date,
       s.latitude,
@@ -141,6 +160,7 @@ def merge_staging_into_weather(dp: int = 5) -> int:
     JOIN public.dimcrags c
     ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric, {dp})
     AND round(c.longitude::numeric,  {dp}) = round(s.longitude::numeric, {dp})
+    ORDER BY c.crag_id, s.date 
     )
     INSERT INTO public.dimhourlyweatherinfo AS d (
           crag_id, date, latitude, longitude,
@@ -168,3 +188,16 @@ def truncate_staging() -> None:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE TABLE public.stg_weather_route")
         conn.commit
+
+def count_unmatched_staging(dp: int = 5) -> int:
+    q = f"""
+    SELECT count(*) AS n
+    FROM public.stg_weather_route s
+    LEFT JOIN public.dimcrags c
+      ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric,  {dp})
+     AND round(c.longitude::numeric, {dp}) = round(s.longitude::numeric, {dp})
+    WHERE c.crag_id IS NULL
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(q)
+        return cur.fetchone()["n"]
