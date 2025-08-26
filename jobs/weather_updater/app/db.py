@@ -65,7 +65,9 @@ def ensure_weather_table():
       temperature_c                REAL,
       precipitation_percentage     REAL,
       relative_humidity_percentage REAL,
-      CONSTRAINT pk_dimhourlyweatherinfo PRIMARY KEY (crag_id, date),
+      load_batch_id                 text,
+      load_ts                       timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT pk_dimhourlyweatherinfo PRIMARY KEY(crag_id, date),
       CONSTRAINT fk_dimhourlyweatherinfo_crag
         FOREIGN KEY (crag_id) REFERENCES dimcrags(crag_id)
         ON UPDATE CASCADE ON DELETE NO ACTION
@@ -104,7 +106,7 @@ def ensure_staging_exists():
         conn.commit()
 
 
-def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
+def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]], load_batch_id: str) -> int:
     """
     Insert parquet rows into public.stg_weather_route.
     """
@@ -120,6 +122,7 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
                 "longitude": r["longitude"],
                 "latitude": r["latitude"],
                 "relative_humidity_percentage": r.get("relative_humidity_percentage"),
+                "load_batch_id": load_batch_id,
             }
         date, precip, temp, lon, lat, rh = r
         return {
@@ -129,15 +132,16 @@ def load_to_staging(rows: Sequence[Mapping[str, Any] | Sequence[Any]]) -> int:
             "longitude": lon,
             "latitude": lat,
             "relative_humidity_percentage": rh,
+            "load_batch_id": load_batch_id,
         }
 
     params = [to_mapping(r) for r in rows]
 
     insert_sql = """
         INSERT INTO public.stg_weather_route
-          (date, precipitation_percentage, temperature_c, longitude, latitude, relative_humidity_percentage)
+          (date, precipitation_percentage, temperature_c, longitude, latitude, relative_humidity_percentage, load_batch_id)
         VALUES
-          (%(date)s, %(precipitation_percentage)s, %(temperature_c)s, %(longitude)s, %(latitude)s, %(relative_humidity_percentage)s)
+          (%(date)s, %(precipitation_percentage)s, %(temperature_c)s, %(longitude)s, %(latitude)s, %(relative_humidity_percentage)s, %(load_batch_id)s)
     """
 
     with get_conn() as conn, conn.cursor() as cur:
@@ -160,7 +164,7 @@ def merge_staging_into_weather(dp: int = 5) -> int:
     JOIN public.dimcrags c
     ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric, {dp})
     AND round(c.longitude::numeric,  {dp}) = round(s.longitude::numeric, {dp})
-    ORDER BY c.crag_id, s.date 
+    ORDER BY c.crag_id, s.date, s.load_ts DESC
     )
     INSERT INTO public.dimhourlyweatherinfo AS d (
           crag_id, date, latitude, longitude,
