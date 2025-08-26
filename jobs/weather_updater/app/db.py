@@ -1,6 +1,6 @@
 import os
-from typing import Iterable
-from psycopg import connect
+from typing import Iterable, Sequence, Mapping, Any
+from psycopg import connect, sql
 from psycopg.rows import dict_row
 
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -21,13 +21,12 @@ def fetch_crag_ids_for_shard(total_shards: int, shard_index: int, limit:int|None
     FROM dimcrags
     WHERE crag_id IS NOT NULL
      AND (crag_id % %(total_shards)s) = %(shard_index)s
-    GROUP BY crag_id
     ORDER BY crag_id
     """
 
     params = {"total_shards": total_shards, "shard_index": shard_index}
     if limit:
-        q += "LIMIT %(limit)s"
+        q += " LIMIT %(limit)s"
         params["limit"] = limit
 
     with get_conn() as conn, conn.cursor() as cur:
@@ -59,13 +58,17 @@ def ensure_weather_table():
     """
     ddl = """
     CREATE TABLE IF NOT EXISTS dimhourlyweatherinfo (
-      crag_id                      BIGINT,
-      date                         TIMESTAMPTZ,
-      latitude                     DOUBLE PRECISION,
-      longitude                    DOUBLE PRECISION,
+      crag_id                      BIGINT           NOT NULL,
+      date                         TIMESTAMPTZ      NOT NULL,
+      latitude                     DOUBLE PRECISION NOT NULL,
+      longitude                    DOUBLE PRECISION NOT NULL,
       temperature_c                REAL,
-      percipitation_percentage     REAL,   
-      relative_humidity_percentage REAL
+      precipitation_percentage     REAL,
+      relative_humidity_percentage REAL,
+      CONSTRAINT pk_dimhourlyweatherinfo PRIMARY KEY (crag_id, date),
+      CONSTRAINT fk_dimhourlyweatherinfo_crag
+        FOREIGN KEY (crag_id) REFERENCES dimcrags(crag_id)
+        ON UPDATE CASCADE ON DELETE CASCADE
     );
 
     CREATE UNIQUE INDEX IF NOT EXISTS dimhourlyweatherinfo_crag_date_uniq_idx
