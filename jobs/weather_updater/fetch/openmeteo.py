@@ -12,7 +12,7 @@ def fetch_weather_data_inmem(coords: List[Tuple[float, float]], max_points: int 
     if max_points:
         coords = coords[:max_points]
 
-    cache_session = requests_cache.CachedSession(".cache", expire_after=3600)
+    cache_session = requests_cache.CachedSession("/tmp/cache", expire_after=3600)
     retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
     client = openmeteo_requests.Client(session=retry_session)
 

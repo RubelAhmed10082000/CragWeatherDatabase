@@ -6,7 +6,7 @@ EXPECTED_COLS = [
 ]
 
 
-def clean_weather_df_inmem(raw: pd.DataFrame) -> pd.DataFrame:
+def clean_weather_data_inmem(raw: pd.DataFrame) -> pd.DataFrame:
     """
     In-memory equivalent of clean_weather_data: rename to your DB column names and keep RH in 0–100 Int64. :contentReference[oaicite:5]{index=5}
     """

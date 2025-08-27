@@ -12,23 +12,20 @@ from jobs.weather_updater.app.db import (
 
 # Importing both fetch and clean functions for weather data
 from jobs.weather_updater.fetch.openmeteo import fetch_weather_data_inmem
-from jobs.weather_updater.clean.normalise import clean_weather_df_inmem
+from jobs.weather_updater.clean.normalise import clean_weather_data_inmem
 
-# Importing GCS IO helpers, read/write crag shards
-
-from modules.gcs_io import gcs_url, read_parquet, write_parquet
-
-DP              = int(os.getenv("DP", "6"))
-RETENTION_DAYS  = int(os.getenv("RETENTION_DAYS", "7"))
-TOTAL_SHARDS    = int(os.getenv("TOTAL_SHARDS", "16"))
-SHARD_INDEX     = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", "0")))
-CHUNK_SIZE      = int(os.getenv("CHUNK_SIZE", "150"))
+# Importing env variables
+DP             = int(os.getenv("DP", "6"))
+RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
+TOTAL_SHARDS   = int(os.getenv("TOTAL_SHARDS", "16"))
+SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", "0")))
+CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
+MAX_POINTS     = int(os.getenv("MAX_POINTS_PER_SHARD", "0")) 
 
 CRAG_SRC = os.getenv("CRAG_SRC", "cleaned/crag/crag_df.parquet")
 WEATHER_DST_PREFIX = os.getenv("WEATHER_DST_PREFIX", "processed/weather")
 CLEAN_DST_PREFIX    = os.getenv("CLEAN_DST_PREFIX",   "cleaned/weather")
-MAX_POINTS_OVERRIDE = os.getenv("MAX_POINTS_PER_SHARD")
-
+                     
 # Column expectations 
 EXPECTED_COLS = [
     "date", "precipitation_percentage",'temperature_c',
@@ -60,46 +57,11 @@ def conform(df: pd.DataFrame, dp: int) -> pd.DataFrame:
 
     # Rounding coordinate precision to match DB
     df["latitude"] = pd.to_numeric(df['latitude'], errors="coerce").round(dp)
-    df["latitude"] = pd.to_numeric(df['longitude'], errors="coerce").round(dp)
+    df["longitude"] = pd.to_numeric(df['longitude'], errors="coerce").round(dp)
 
     # Dropping rows that miss critical field e.g. date and coords
     df = df.dropna(subset=["date","latitude","longitude"])
-
-def make_paths():
-    ts = datetime.new(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    shard_tag = f"shard{SHARD_INDEX}_of_{TOTAL_SHARDS}"
-
-    # Per-shard crag list 
-    crag_src_shard_blob = f"tmp/shards/{shard_tag}/{ts}/crag_df.parquet"
-    
-    # Writes fetched weather data to GCS blob
-    weather_dst_blob = f"{WEATHER_DST_PREFIX}/{shard_tag}/{ts}.parquet"
-
-    # Cleaned data writes here
-    clean_dst_blob = f"{CLEAN_DST_PREFIX}/{shard_tag}/{ts}.parquet"
-    return shard_tag, ts, crag_src_shard_blob, weather_dst_blob, clean_dst_blob
-
-def build_shard_crag_parquet(global_crag_blob: str, 
-                             shard_crag_blob: str, crag_ids_for_shard) -> int:
-    
-    """
-    Read full crag_df.parquet from GCS 
-    """
-    crag_df = read_parquet(gcs_url(*global_crag_blob.split("/")))
-    if crag_df is None or crag_df.empty:
-        return 0
-    
-    id_col = "crag_id"
-    assert id_col in crag_df.columns, f"{id_col} missing in {global_crag_blob}"
-
-    shard_df = crag_df[crag_df[id_col].isin(crag_ids_for_shard)].copy()
-    if shard_df.empty:
-        return 0
-    
-    # Writes shard to GCS
-    write_parquet(shard_df, gcs_url(*shard_crag_blob.split('/')))
-    return len(shard_df)
-
+    return df
 
 # Main function which runs everything
 def main():
@@ -117,19 +79,22 @@ def main():
         print(f"No coords in shard {SHARD_INDEX}")
         return 
     
+    if MAX_POINTS > 0:
+        coords = coords[:MAX_POINTS]
+    
     # Runs API call, clean and conform for each chunk
     parts = []
     for group in chunk(coords, CHUNK_SIZE):
-        raw = fetch_weather_data(group)
-        cln = clean_weather_data(raw)
-        fin = conform(cln, DP)
-        if not fin.empty:
-            parts.append(fin)
+        raw = fetch_weather_data_inmem(group)
+        clean = clean_weather_data_inmem(raw)
+        df = conform(clean, DP)
+        if not df.empty:
+            parts.append(df)
     
-    if not parts:
-        print("No rows after cleaning.")
+    if not parts or df.empty:
+        print("No rows after cleaning/conforming")
+        return
 
-    # Concatanates each chunk to a dataframe
     df = pd.concat(parts, ignore_index=True)
     
     # Creates batch id and run id for monitoring purposes
