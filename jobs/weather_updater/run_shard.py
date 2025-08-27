@@ -22,9 +22,6 @@ SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", 
 CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
 MAX_POINTS     = int(os.getenv("MAX_POINTS_PER_SHARD", "0")) 
 
-CRAG_SRC = os.getenv("CRAG_SRC", "cleaned/crag/crag_df.parquet")
-WEATHER_DST_PREFIX = os.getenv("WEATHER_DST_PREFIX", "processed/weather")
-CLEAN_DST_PREFIX    = os.getenv("CLEAN_DST_PREFIX",   "cleaned/weather")
                      
 # Column expectations 
 EXPECTED_COLS = [
@@ -91,7 +88,7 @@ def main():
         if not df.empty:
             parts.append(df)
     
-    if not parts or df.empty:
+    if not parts:
         print("No rows after cleaning/conforming")
         return
 
