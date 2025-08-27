@@ -36,34 +36,9 @@ def parse_args():
     p.add_argument("--retention-days", type=int, default=7, help="Delete staging rows older than N days (default: 7)")
     return p.parse_args()
 
-def log_free_tier_usage(elapsed_seconds: float):
-    """
-    Prints whether this task's runtime fits in Cloud Run's monthly free tier.
-    """
-    runs_per_month = 720  # hourly update * 30 days
-    tasks = int(os.getenv("TOTAL_SHARDS", "16"))
-    mem_gib = float(os.getenv("MEMORY_GIB", "1"))  
-
-    # Cloud Run free tier per month:
-    CPU_FREE = 240_000       # vCPU-seconds
-    MEM_FREE = 450_000       # GiB-seconds
-
-    cpu_allow_per_task = CPU_FREE / (tasks * runs_per_month)                # seconds
-    mem_allow_per_task = MEM_FREE / (tasks * runs_per_month * mem_gib)      # seconds
-
-    print({
-        "task_elapsed_s": round(elapsed_seconds, 3),
-        "cpu_free_allow_s_per_task": round(cpu_allow_per_task, 1),
-        "mem_free_allow_s_per_task": round(mem_allow_per_task, 1),
-        "under_cpu_free": elapsed_seconds <= cpu_allow_per_task,
-        "under_mem_free": elapsed_seconds <= mem_allow_per_task,
-        "tasks": tasks,
-        "mem_gib": mem_gib
-    })
 
 
 def main():
-    t0 = time.perf_counter()
     args = parse_args()
 
     ensure_weather_table()
@@ -119,8 +94,7 @@ def main():
         print(f"Retention cleanup (> {args.retention_days} days): {pruned} rows removed")
 
         log_run_finish(run_id, staged=staged, unmatched=unmatched, upserted=upserted, status="success")
-        elapsed = time.perf_counter() - t0 
-        log_free_tier_usage(elapsed)
+        
 
     except Exception as e:
         log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status=f"failed: {e}")
