@@ -8,12 +8,11 @@ from jobs.weather_updater.app.db import (
     fetch_crag_ids_for_shard, fetch_coords_for_crags,
     load_to_staging, count_unmatched_staging, delete_staging_batch,
     delete_old_staging, log_run_start, log_run_finish, upsert_dim_hourly,
-)
+) 
 
 # Importing both fetch and clean functions for weather data
-# from modules packages
-from modules.fetch_weather_data import fetch_weather_data
-from modules.clean_weather_data import clean_weather_data
+from jobs.weather_updater.fetch.openmeteo import fetch_weather_data_inmem
+from jobs.weather_updater.clean.normalise import clean_weather_df_inmem
 
 # Importing GCS IO helpers, read/write crag shards
 
