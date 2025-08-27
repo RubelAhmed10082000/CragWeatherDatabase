@@ -1,14 +1,31 @@
-.git
+# Ignore Python cache files and folders
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.egg-info/
-dist/
-build/
-.venv/
+
+# Ignore SQLite and database files
+*.sqlite
+*.db
+
+# Ignore log files and folders
+logs/
+
+dags/__pycache__/expectations.cpython-312.pyc
+
+dags/__pycache__/main.cpython-312.pyc
+
+config/
+
+Working_Code/__pycache__/
+
+.cache.sqlite
+
 .env
-.cache/
-.ipynb_checkpoints/
-tests/
-notebooks/
+
+.vscode/
+
+data/
+
+
+
+
+.env

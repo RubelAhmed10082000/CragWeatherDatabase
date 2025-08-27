@@ -14,27 +14,25 @@ def get_connection():
     """
     return connect(DATABASE_URL, row_factory=dict_row)
 
-def fetch_crag_ids_for_shard(total_shards: int, shard_index: int, limit:int|None=None) -> list[int]:
+def fetch_crag_ids_for_shard(total_shards: int, shard_index: int,
+                             refresh_rings: int | None = None,
+                             ring_index: int | None = None) -> list[int]:
+    q = """
+        SELECT crag_id
+        FROM public.dimcrags
+        WHERE mod(crag_id, %s) = %s
     """
-    Assign work by crag_id % of total shards
-    """
+    params = [total_shards, shard_index]
 
-    q ="""
-    SELECT crag_id
-    FROM dimcrags
-    WHERE crag_id IS NOT NULL
-     AND (crag_id % %(total_shards)s) = %(shard_index)s
-    ORDER BY crag_id
-    """
+    if refresh_rings is not None and ring_index is not None:
+        q += " AND mod(crag_id, %s) = %s"
+        params += [refresh_rings, ring_index]
 
-    params = {"total_shards": total_shards, "shard_index": shard_index}
-    if limit:
-        q += " LIMIT %(limit)s"
-        params["limit"] = limit
+    q += " ORDER BY crag_id"
 
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(q, params)
-        return [r["crag_id"] for r in cur.fetchall()]
+        return [r[0] for r in cur.fetchall()]
     
 def fetch_coords_for_crags(crag_ids: Iterable[int]) -> dict[int, tuple[float,float]]:
     """

@@ -1,0 +1,8 @@
+# Ignore everything by default
+**
+
+# Allow only what’s needed to build
+!Dockerfile
+!requirements.txt
+!jobs/**
+!modules/**
