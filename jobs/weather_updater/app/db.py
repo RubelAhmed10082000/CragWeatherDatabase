@@ -76,6 +76,15 @@ def ensure_weather_table():
         ON UPDATE CASCADE ON DELETE NO ACTION
     );
 
+    ALTER TABLE public.dimhourlyweatherinfo
+          ADD COLUMN IF NOT EXISTS last_updated_ts TIMESTAMPTZ;
+    
+    ALTER TABLE public.dimhourlyweatherinfo
+          ADD COLUMN IF NOT EXISTS load_ts TIMESTAMPTZ NOT NULL DEFAULT now();
+
+    CREATE UNIQUE INDEX IF NOT EXISTS dimhourlyweatherinfo_crag_date_uidx
+          ON public.dimhourlyweatherinfo (crag_id, date);
+
     CREATE INDEX IF NOT EXISTS dimhourlyweatherinfo_date_idx
       ON dimhourlyweatherinfo (date);
 
@@ -243,44 +252,6 @@ def count_unmatched_staging(dp: int = 6, load_batch_id: str | None = None) -> in
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(q, params)
         return cur.fetchone()["n"]
-    
-def merge_batch_old(load_batch_id: str, dp: int = 6) -> int:
-    dp = int(dp)
-    sql = f"""
-    WITH src AS (
-      SELECT DISTINCT ON (c.crag_id, s.date)
-        c.crag_id,
-        s.date,
-        s.latitude,
-        s.longitude,
-        s.temperature_c,
-        s.precipitation_percentage,
-        s.relative_humidity_percentage
-      FROM public.stg_weather_route s
-      JOIN public.dimcrags c
-        ON round(c.latitude::numeric,  {dp}) = round(s.latitude::numeric,  {dp})
-       AND round(c.longitude::numeric, {dp}) = round(s.longitude::numeric, {dp})
-      WHERE s.load_batch_id = %(batch)s
-      ORDER BY c.crag_id, s.date, s.load_ts DESC
-    )
-    INSERT INTO public.dimhourlyweatherinfo AS d (
-      crag_id, date, latitude, longitude,
-      temperature_c, precipitation_percentage, relative_humidity_percentage
-    )
-    SELECT * FROM src
-    ON CONFLICT (crag_id, date) DO UPDATE SET
-      latitude                     = EXCLUDED.latitude,
-      longitude                    = EXCLUDED.longitude,
-      temperature_c                = EXCLUDED.temperature_c,
-      precipitation_percentage     = EXCLUDED.precipitation_percentage,
-      relative_humidity_percentage = EXCLUDED.relative_humidity_percentage
-    RETURNING 1;
-    """
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, {"batch": load_batch_id})
-        rows = cur.fetchall()
-        conn.commit()
-        return len(rows)
 
 def delete_staging_batch(load_batch_id: str) -> int:
     with get_connection() as conn, conn.cursor() as cur:
