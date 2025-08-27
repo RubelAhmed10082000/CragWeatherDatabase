@@ -5,6 +5,7 @@ from typing import Iterable, Sequence, Mapping, Any
 from psycopg import connect
 from psycopg.rows import dict_row
 import math
+import psycopg
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
@@ -35,23 +36,30 @@ def fetch_crag_ids_for_shard(total_shards: int, shard_index: int,
         rows = cur.fetchall()
         return [row["crag_id"] for row in rows] 
     
-def fetch_coords_for_crags(crag_ids: Iterable[int]) -> dict[int, tuple[float,float]]:
+def fetch_coords_for_crags(crag_ids: Iterable[int]) -> dict[int, tuple[float, float]]:
     """
-    Fetching coordinates for each crag. We will average out each route coord per crag
+    Returns {crag_id: (lat, lon)} for the given IDs.
     """
-
-    ids = list(crag_ids)
+    ids = [int(x) for x in crag_ids]
     if not ids:
         return {}
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("""
-        SELECT crag_id, latitude AS lat, longitude AS lon
-        FROM dimcrags
-        WHERE crag_id = ANY(%(ids)s)
+
+    q = """
+        SELECT crag_id, latitude::float8 AS lat, longitude::float8 AS lon
+        FROM public.dimcrags
+        WHERE crag_id = ANY(%s)
           AND latitude  IS NOT NULL
           AND longitude IS NOT NULL
-        """, {"ids": ids})
-        return {r["crag_id"]: (r["lat"], r["lon"]) for r in cur.fetchall()}
+    """
+    with get_connection() as conn, conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+        cur.execute(q, (ids,))
+        out: dict[int, tuple[float, float]] = {}
+        for row in cur:  
+            cid = int(row["crag_id"])
+            lat = float(row["lat"])
+            lon = float(row["lon"])
+            out[cid] = (lat, lon) 
+        return out
     
 def ensure_weather_table():
     """
