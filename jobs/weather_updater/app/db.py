@@ -32,7 +32,8 @@ def fetch_crag_ids_for_shard(total_shards: int, shard_index: int,
 
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(q, params)
-        return [r[0] for r in cur.fetchall()]
+        rows = cur.fetchall()
+        return [row["crag_id"] for row in rows] 
     
 def fetch_coords_for_crags(crag_ids: Iterable[int]) -> dict[int, tuple[float,float]]:
     """
