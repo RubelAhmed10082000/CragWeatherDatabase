@@ -98,6 +98,7 @@ def ensure_schema():
         # Executes functions found later in the script
         _ensure_primitives(conn)
         _ensure_tables(conn)
+        _ensure_views(conn) 
         _ensure_indexes(conn)
         _record_version(conn, SCHEMA_VERSION_ID)
 
@@ -138,7 +139,7 @@ def _ensure_tables(conn):
     CREATE TABLE IF NOT EXISTS public.dimcrags (
           crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             crag_name TEXT NOT NULL,
-            region TEXT,
+            county TEXT,
             latitude DOUBLE PRECISION,
             longitude DOUBLE PRECISION,
             rocktype TEXT,
@@ -228,7 +229,56 @@ def _record_version(conn, version_id:str):
         VALUES (%(v)s)
         ON CONFLICT (version_id) DO NOTHING;
     """, {"v": version_id})
+
+def _ensure_views(conn):
+    """
+    Ensure views exists otherwise creates them
+    """
   
+  # routes + crags
+
+    run_sql(conn, """ 
+    CREATE OR REPLACE VIEW public.v_routes_with_crag AS
+    SELECT 
+      r.route_id,
+      r.route_name,
+      r.grade,
+      r.safety_grade,
+      r.crag_id,
+      c.crag_name,
+      c.county,
+      c.latitude,
+      c.longitude,
+      c.rocktype,
+      c.climbing_style
+    FROM public.dimroutes r 
+    JOIN public.dimcrags c ON c.crag_id = r.crag_id;
+    """)
+
+  # Weather with crag attributes for API/frontend
+
+    run_sql(conn, """
+    CREATE OR REPLACE VIEW public.v_crag_hourly_weather AS
+    SELECT 
+      f.crag_id,
+      c.crag_name,
+      c.county,
+      c.latitude,
+      c.longitude,
+      c.rocktype,
+      c.climbing_style,
+      f.date,
+      f.precipitation_percentage,
+      f.wind_speed_ms,
+      f.load_batch_id,
+      f.load_ts,
+      f.forecast_run_ts,
+      f.horizon_hours
+    FROM public.fact_hourly_weather f
+    JOIN public.dimcrags c ON c.crag_id = f.crag_id;
+""")
+    
+
 if __name__ == "__main__":
     ensure_schema()
     print("Schema ensured")
