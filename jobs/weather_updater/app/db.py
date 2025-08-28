@@ -171,7 +171,7 @@ def _ensure_tables(conn):
             temperature_c REAL,
             relative_humidity_percentage REAL,
             precipitation_mm NUMERIC(6,2),
-            wind_speed_ms REAL,
+            windspeed_ms REAL,
             load_ts TIMESTAMPTZ DEFAULT now(),
             load_batch_id TEXT NOT NULL,
             forecast_run_ts TIMESTAMPTZ,
@@ -180,7 +180,7 @@ def _ensure_tables(conn):
             CONSTRAINT fact_crag_hourly_weather_crag_fk FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id),
             CONSTRAINT rh_0_100_chk CHECK (relative_humidity_percentage IS NULL OR (relative_humidity_percentage BETWEEN 0 AND 100)),
             CONSTRAINT precip_0_100_chk CHECK (precipitation_mm IS NULL OR precipitation_mm >= 0),
-            CONSTRAINT wind_nonneg_chk CHECK (wind_speed_ms IS NULL OR wind_speed_ms >= 0)
+            CONSTRAINT wind_nonneg_chk CHECK (windspeed_ms IS NULL OR windspeed_ms >= 0)
       );
       """)
     
@@ -273,7 +273,7 @@ def _ensure_views(conn):
       f.temperature_c,
       f.relative_humidity_percentage,
       f.precipitation_mm
-      f.wind_speed_ms,
+      f.windspeed_ms,
       f.load_batch_id,
       f.load_ts,
       f.forecast_run_ts,
