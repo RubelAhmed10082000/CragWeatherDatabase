@@ -29,3 +29,6 @@ data/
 
 
 .env
+
+--region
+--set-secrets
