@@ -191,6 +191,7 @@ def _ensure_tables(conn):
             precipitation_mm NUMERIC(6,2),
             temperature_c REAL,
             relative_humidity_percentage REAL,
+            windspeed_ms REAL,
             crag_id UUID NOT NULL,
             longitude DOUBLE PRECISION,
             latitude DOUBLE PRECISION,
