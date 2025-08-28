@@ -1,8 +1,8 @@
 import pandas as pd
 
 EXPECTED_COLS = [
-    "date", "precipitation_percentage", "temperature_c",
-    "longitude", "latitude", "relative_humidity_percentage",
+    "date", "precipitation_mm", "temperature_c",
+    "longitude", "latitude", "relative_humidity_percentage","windspeed_m/m",
 ]
 
 
@@ -17,6 +17,7 @@ def clean_weather_data_inmem(raw: pd.DataFrame) -> pd.DataFrame:
         "temperature_2m": "temperature_c",
         "relative_humidity_2m": "relative_humidity_percentage",
         "precipitation": "precipitation_percentage",
+        "wind_speed_10m": "windspeed_m/s",
     })
     df["relative_humidity_percentage"] = pd.to_numeric(df["relative_humidity_percentage"], errors="coerce").round().clip(0, 100).astype("Int64")
     return df
