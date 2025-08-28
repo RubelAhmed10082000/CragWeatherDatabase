@@ -99,7 +99,6 @@ def ensure_schema():
         _ensure_primitives(conn)
         _ensure_tables(conn)
         _ensure_indexes(conn)
-        _ensure_text_checks(conn)
         _record_version(conn, SCHEMA_VERSION_ID)
 
 def _sql_in_list(values: list[str]) -> str:
@@ -123,8 +122,7 @@ def _ensure_primitives(conn):
             );
 """)
     
-rock_in  = _sql_in_list(ROCK_TYPES_ALLOWED)
-style_in = _sql_in_list(STYLES_ALLOWED)
+
 
 def _ensure_tables(conn):
     """
@@ -132,16 +130,17 @@ def _ensure_tables(conn):
     Creates them if they don't exist
     """
 
-    
+    rock_in  = _sql_in_list(ROCK_TYPES_ALLOWED)
+    style_in = _sql_in_list(STYLES_ALLOWED)
     
     # dimcrags 
-    run_sql(conn, """
+    run_sql(conn, f"""
     CREATE TABLE IF NOT EXISTS public.dimcrags (
-          crag_id UUID PRIMARY KEY DEFAULTY gen_random_uuid(),
+          crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             crag_name TEXT NOT NULL,
             region TEXT,
             latitude DOUBLE PRECISION,
-            longitude DOUBLE PRECSION,
+            longitude DOUBLE PRECISION,
             rocktype TEXT,
             climbing_style TEXT,
             CONSTRAINT rocktype_chk
@@ -170,14 +169,16 @@ def _ensure_tables(conn):
             date TIMESTAMPTZ NOT NULL,
             temperature_c REAL,
             relative_humidity_percentage REAL,
-            precipitation_percentage REAL,
-            created_at TIMESTAMPTZ DEFAULT now(),
+            precipitation_mm FLOAT,
+            wind_speed_ms REAL,
             load_ts TIMESTAMPTZ DEFAULT now(),
             load_batch_id TEXT NOT NULL,
             forecast_run_ts TIMESTAMPTZ,
             horizon_hours INT,
             CONSTRAINT fact_crag_hourly_weather_pk PRIMARY KEY (crag_id, date),
-            CONSTRAINT fact_crag_hourly_weather_crag_fk FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id)
+            CONSTRAINT fact_crag_hourly_weather_crag_fk FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id),
+            CONSTRAINT rh_0_100_chk CHECK (relative_humidity_percentage IS NULL OR (relative_humidity_percentage BETWEEN 0 AND 100)),
+            CONSTRAINT precip_0_100_chk CHECK (precipitation_percentage IS NULL OR (precipitation_percentage BETWEEN 0 AND 100)),
             );
             """)
     
@@ -190,8 +191,9 @@ def _ensure_tables(conn):
             relative_humidity_percentage REAL,
             crag_id UUID NOT NULL,
             longitude DOUBLE PRECISION,
-            LATITUDE DOUBLE PRECISION,
-            load_batch_id TEXT NOT NULL
+            latitude DOUBLE PRECISION,
+            load_batch_id TEXT NOT NULL,
+            CONSTRAINT stg_weather_unique_per_batch UNIQUE (crag_id, date, load_batch_id)
             );
             """)
     
@@ -217,7 +219,8 @@ def _ensure_indexes(conn):
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_crag_date_idx ON public.fact_crag_hourly_weather (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (load_batch_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_crag_date_idx ON public.stg_weather_route (crag_id, date);")
-
+    run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_batch_idx ON public.fact_crag_hourly_weather (load_batch_id);")
+    run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_loadts_idx ON public.fact_crag_hourly_weather (load_ts);")
 
 def _record_version(conn, version_id:str):
     run_sql(conn, """
