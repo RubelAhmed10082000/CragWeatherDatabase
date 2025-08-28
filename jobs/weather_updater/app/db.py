@@ -147,7 +147,7 @@ def _ensure_tables(conn):
             CONSTRAINT rocktype_chk
               CHECK(rocktype IS NULL OR rocktype IN ({rock_in})),
             CONSTRAINT climbing_style_chk
-              CHECK (climbing_style IS NOT NULL OR climbing_style IN ({style_in}))
+              CHECK (climbing_style IS NULL OR climbing_style IN ({style_in}))
             );
           """ )
     
@@ -170,7 +170,7 @@ def _ensure_tables(conn):
             date TIMESTAMPTZ NOT NULL,
             temperature_c REAL,
             relative_humidity_percentage REAL,
-            precipitation_mm FLOAT,
+            precipitation_mm NUMERIC(6,2),
             wind_speed_ms REAL,
             load_ts TIMESTAMPTZ DEFAULT now(),
             load_batch_id TEXT NOT NULL,
@@ -179,7 +179,7 @@ def _ensure_tables(conn):
             CONSTRAINT fact_crag_hourly_weather_pk PRIMARY KEY (crag_id, date),
             CONSTRAINT fact_crag_hourly_weather_crag_fk FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id),
             CONSTRAINT rh_0_100_chk CHECK (relative_humidity_percentage IS NULL OR (relative_humidity_percentage BETWEEN 0 AND 100)),
-            CONSTRAINT precip_0_100_chk CHECK (precipitation_percentage IS NULL OR (precipitation_percentage BETWEEN 0 AND 100)),
+            CONSTRAINT precip_0_100_chk CHECK (precipitation_mm IS NULL OR (precipitation_mm < 0))
             );
             """)
     
@@ -187,7 +187,7 @@ def _ensure_tables(conn):
     run_sql(conn, """
     CREATE TABLE IF NOT EXISTS public.stg_weather_route(
             date TIMESTAMPTZ NOT NULL,
-            precipitation_percentage REAL,
+            precipitation_mm NUMERIC(6,2),
             temperature_c REAL,
             relative_humidity_percentage REAL,
             crag_id UUID NOT NULL,
@@ -268,13 +268,13 @@ def _ensure_views(conn):
       c.rocktype,
       c.climbing_style,
       f.date,
-      f.precipitation_percentage,
+      f.precipitation_mm,
       f.wind_speed_ms,
       f.load_batch_id,
       f.load_ts,
       f.forecast_run_ts,
       f.horizon_hours
-    FROM public.fact_hourly_weather f
+    FROM public.fact_crag_hourly_weather f
     JOIN public.dimcrags c ON c.crag_id = f.crag_id;
 """)
     
