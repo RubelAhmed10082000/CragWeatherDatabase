@@ -137,7 +137,7 @@ def _ensure_tables(conn):
     # dimcrags 
     run_sql(conn, f"""
     CREATE TABLE IF NOT EXISTS public.dimcrags (
-            crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             crag_name TEXT NOT NULL,
             county TEXT,
             latitude DOUBLE PRECISION,
@@ -272,7 +272,7 @@ def _ensure_views(conn):
       f.date,
       f.temperature_c,
       f.relative_humidity_percentage,
-      f.precipitation_mm,
+      f.precipitation_mm
       f.windspeed_ms,
       f.load_batch_id,
       f.load_ts,

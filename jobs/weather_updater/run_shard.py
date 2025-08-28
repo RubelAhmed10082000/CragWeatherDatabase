@@ -13,6 +13,7 @@ from jobs.weather_updater.app.db import (
 
 # Importing both fetch and clean functions for weather data
 from jobs.weather_updater.fetch.openmeteo import fetch_weather_data_inmem
+from jobs.weather_updater.clean.normalise import clean_weather_data_inmem
 
 # Importing env variables
 DP             = int(os.getenv("DP", "6"))
@@ -110,7 +111,9 @@ def main():
     # Runs API call, clean and conform for each chunk
     parts = []
     for group in chunk(coords, CHUNK_SIZE):
-        df = fetch_weather_data_inmem(group)
+        raw = fetch_weather_data_inmem(group)
+        clean = clean_weather_data_inmem(raw)
+        df = conform(clean, DP)
         if not df.empty:
             parts.append(df)
     

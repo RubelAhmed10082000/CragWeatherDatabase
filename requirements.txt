@@ -10,5 +10,5 @@ psycopg
 gcsfs
 google-cloud-storage
 pydantic_settings
-psycopg[binary]
+psycopg[binary]==3.2.9
 fsspec
