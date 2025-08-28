@@ -63,7 +63,7 @@ UNKNOWNS = {"UNKNOWN", "UNK", "N/A", "NA", ""}
 ROCK_TYPES_ALLOWED = [v for v in ROCK_TYPES if v.strip().upper() not in UNKNOWNS]
 STYLES_ALLOWED      = [v for v in CLIMBING_STYLES if v.strip().upper() not in UNKNOWNS]
 
-SCHEMA_VERSION_ID = "2025-08-28_optA_text_checks_v1"
+SCHEMA_VERSION_ID = "2025-08-28_optA_text_checks_v3"
 
 @contextmanager
 def get_connection():
@@ -179,9 +179,10 @@ def _ensure_tables(conn):
             CONSTRAINT fact_crag_hourly_weather_pk PRIMARY KEY (crag_id, date),
             CONSTRAINT fact_crag_hourly_weather_crag_fk FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id),
             CONSTRAINT rh_0_100_chk CHECK (relative_humidity_percentage IS NULL OR (relative_humidity_percentage BETWEEN 0 AND 100)),
-            CONSTRAINT precip_0_100_chk CHECK (precipitation_mm IS NULL OR (precipitation_mm < 0))
-            );
-            """)
+            CONSTRAINT precip_0_100_chk CHECK (precipitation_mm IS NULL OR precipitation_mm >= 0),
+            CONSTRAINT wind_nonneg_chk CHECK (wind_speed_ms IS NULL OR wind_speed_ms >= 0)
+      );
+      """)
     
     # Staging for weather data
     run_sql(conn, """
@@ -268,7 +269,9 @@ def _ensure_views(conn):
       c.rocktype,
       c.climbing_style,
       f.date,
-      f.precipitation_mm,
+      f.temperature_c,
+      f.relative_humidity_percentage,
+      f.precipitation_mm
       f.wind_speed_ms,
       f.load_batch_id,
       f.load_ts,
