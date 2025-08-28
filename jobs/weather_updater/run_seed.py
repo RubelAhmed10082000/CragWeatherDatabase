@@ -77,11 +77,11 @@ def _chunk(iterable, n):
         yield batch
 
 def insert_crags(conn, crags_df: pd.DataFrame, batch_size: int = 5000):
-    cols = ["crag_id","crag_name","county","latitude","longitude","rocktype","climbing_style"]
+    cols = ["crag_id","crag_name","county","latitude","longitude","rocktype","type"]
     native = crags_df[cols].astype(object).where(pd.notna(crags_df[cols]), None)
     records = [tuple(row) for row in native.to_numpy()]
     sql = """
-        INSERT INTO public.dimcrags (crag_id, crag_name, county, latitude, longitude, rocktype, climbing_style)
+        INSERT INTO public.dimcrags (crag_id, crag_name, county, latitude, longitude, rocktype, type)
         VALUES (%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (crag_id) DO NOTHING
     """
@@ -126,7 +126,7 @@ def main():
 
     for col in ["route_id", "route_name", "difficulty_grade", "safety_grade",
                 "crag_name", "county", "latitude", "longitude",
-                "rocktype", "climbing_style"]:
+                "rocktype", "type"]:
         if col not in df.columns:
             df[col] = None
 
@@ -134,7 +134,7 @@ def main():
     df["crag_name"] = df["crag_name"].apply(_canon_str)
     df["county"] = df["county"].apply(_canon_str)
     df["rocktype"] = df["rocktype"].apply(lambda v: _normalize_vocab(v, ROCK_TYPES_ALLOWED))
-    df["climbing_style"] = df["climbing_style"].apply(lambda v: _normalize_vocab(v, STYLES_ALLOWED))
+    df["type"] = df["type"].apply(lambda v: _normalize_vocab(v, STYLES_ALLOWED))
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
 
@@ -151,7 +151,7 @@ def main():
     ]
 
     crag_df = (
-        df[["crag_id", "crag_name", "county", "lat_r", "lon_r", "rocktype", "climbing_style"]]
+        df[["crag_id", "crag_name", "county", "lat_r", "lon_r", "rocktype", "type"]]
         .dropna(subset=["crag_name"])
         .loc[lambda d: d["crag_name"].str.strip().ne("")]
         .drop_duplicates("crag_id")
