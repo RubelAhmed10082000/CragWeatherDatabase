@@ -213,6 +213,16 @@ def _ensure_tables(conn):
           finished_at TIMESTAMPTZ
       );
       """)
+    
+    # Creating table that last time each crag experienced rain
+    run_sql(conn, """
+    CREATE TABLE IF NOT EXISTS public.crag_last_rain_state (
+      crag_id UUID PRIMARY KEY,
+      last_rained_ts TIMESTAMPTZ,
+      last_rain_severity TEXT,
+      updated_at TIMESTAMPTZ DEFAULT now()
+      );    
+      """)
 
     
 def _ensure_indexes(conn):
@@ -280,8 +290,15 @@ def _ensure_views(conn):
       f.load_ts,
       f.forecast_run_ts,
       f.horizon_hours
+      s.last_rained_ts,
+      s.last_rain_severity,
+      CASE 
+            WHEN s.last_rained_ts IS NULL THEN NULL
+            ELSE EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - s.last_rained_ts))
+            END AS hours_since_rain
     FROM public.fact_crag_hourly_weather f
-    JOIN public.dimcrags c ON c.crag_id = f.crag_id;
+    JOIN public.dimcrags c ON c.crag_id = f.crag_id
+    LEFT JOIN public.crag_last_rain_state s ON s.crag_id = f.crag_id;
 """)
     
 
@@ -431,6 +448,58 @@ def upsert_fact_window(cir, load_batch_id: str, hours: int = 12) -> tuple[int, i
         ORDER BY s.crag_id, s.date           
         """, {"b":load_batch_id, "ws": window_start, "we": window_end})
       inserted = cur.rowcount or 0
+
+      # Find newest hour with rain per crag (in any)
+      cur.execute("""
+      WITH newest_in_window AS (
+        SELECT
+          s.crag_id,
+          max(CASE WHEN s.precipitation_mm > 0 THEN s.date END) AS newest_rain_ts
+        FROM public.stg_weather_route s
+        JOIN _batch_crags bc USING (crag_id)
+        WHERE s.load_batch_id = %(b)s
+          AND s.date >= %(ws)s AND s.date < %(we)s
+        GROUP BY s.crag_id
+      ),
+      severity_lookup AS (
+        SELECT
+          n.crag_id,
+          n.newest_rain_ts,
+          CASE
+            WHEN n.newest_rain_ts IS NULL THEN NULL
+            ELSE (
+              SELECT CASE
+                      WHEN sw.precipitation_mm < 1.0 THEN 'light'
+                      WHEN sw.precipitation_mm < 4.0 THEN 'medium'
+                      ELSE 'heavy'
+                    END
+              FROM public.stg_weather_route sw
+              WHERE sw.crag_id = n.crag_id
+                AND sw.date = n.newest_rain_ts
+              LIMIT 1
+            )
+          END AS newest_rain_severity
+        FROM newest_in_window n
+      ),
+      merged AS (
+        -- Carry forward prior state if no new rain happened in this window
+        SELECT
+          bc.crag_id,
+          COALESCE(sl.newest_rain_ts, prs.last_rained_ts)       AS last_rained_ts,
+          COALESCE(sl.newest_rain_severity, prs.last_rain_severity) AS last_rain_severity
+        FROM _batch_crags bc
+        LEFT JOIN severity_lookup sl ON sl.crag_id = bc.crag_id
+        LEFT JOIN public.crag_last_rain_state prs ON prs.crag_id = bc.crag_id
+      )
+      INSERT INTO public.crag_last_rain_state AS s
+        (crag_id, last_rained_ts, last_rain_severity, updated_at)
+      SELECT crag_id, last_rained_ts, last_rain_severity, now()
+      FROM merged
+      ON CONFLICT (crag_id) DO UPDATE
+        SET last_rained_ts = EXCLUDED.last_rained_ts,
+            last_rain_severity = EXCLUDED.last_rain_severity,
+            updated_at = now();
+    """, {"b": load_batch_id, "ws": window_start, "we": window_end})
 
       return inserted, deleted
 
