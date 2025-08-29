@@ -289,7 +289,7 @@ def _ensure_views(conn):
       f.load_batch_id,
       f.load_ts,
       f.forecast_run_ts,
-      f.horizon_hours
+      f.horizon_hours,
       s.last_rained_ts,
       s.last_rain_severity,
       CASE 
@@ -380,6 +380,7 @@ def delete_staging_batch(load_batch_id:str) -> int:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM public.stg_weather_route WHERE load_batch_id = %(b)s", {"b":load_batch_id})
 
+    return cur.rowcount or 0
 
 def delete_old_staging(days: int = 7) -> int:
     """
@@ -392,7 +393,7 @@ def delete_old_staging(days: int = 7) -> int:
     
 
 
-def upsert_fact_window(cir, load_batch_id: str, hours: int = 12) -> tuple[int, int]:
+def upsert_fact_window(load_batch_id: str, hours: int = 12) -> tuple[int, int]:
     """
     upserts weather data based on sliding window basis 
     from current hour for 12 hours in the future
@@ -521,7 +522,7 @@ def log_run_finish(run_id: str, staged: int, unmatched: int, upserted: int,
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
         UPDATE public.crag_runs_logs
-          SET status = %(n)s,
+          SET status = %(s)s,
                     notes = %(n)s,
                     finished_at = now()
         WHERE run_id = %(ids)s::uuid
