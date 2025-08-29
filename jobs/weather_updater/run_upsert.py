@@ -5,14 +5,11 @@ import time
 
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (
-    get_connection, ensure_weather_table, ensure_staging_exists,
-    fetch_crag_ids_for_shard, fetch_coords_for_crags,
-    load_to_staging, count_unmatched_staging, delete_staging_batch,
-    delete_old_staging, log_run_start, log_run_finish, upsert_dim_hourly,
+    get_connection, ensure_schema
 ) 
 
 # Importing both fetch and clean functions for weather data
-from jobs.weather_updater.fetch.openmeteo import fetch_weather_data_inmem
+from jobs.weather_updater.fetch.openmeteo import fetch_weather_for_crags_staging
 
 # Importing env variables
 DP             = int(os.getenv("DP", "6"))
@@ -23,57 +20,24 @@ CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
 MAX_POINTS     = int(os.getenv("MAX_POINTS_PER_SHARD", "0")) 
 
                      
-# Column expectations 
-EXPECTED_COLS = [
-    "date", "precipitation_percentage",'temperature_c',
-    "longitude", 'latitude', 'relative_humidity_percentage',
-]
-
 # Creating chunks 
 def chunk(lst, n):
     for i in range(0, len(lst),n):
         yield lst[i:i+n]
 
-def conform(df: pd.DataFrame, dp: int) -> pd.DataFrame:
-    """
-    Ensuring PD matches staging/upsert expectaions exactly
-    """
-
-    # Ensure required columns exists
-    # Create if not existing
-    for col in EXPECTED_COLS:
-        if col not in df.columns:
-            df[col] = pd.NA
-
-    # Making sure date is correct type for upsert
-    df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
-
-    # Numeric coercions
-    for col in ['precipitation_percentage','temperature_c','relative_humidity_percentage']:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Rounding coordinate precision to match DB
-    df["latitude"] = pd.to_numeric(df['latitude'], errors="coerce").round(dp)
-    df["longitude"] = pd.to_numeric(df['longitude'], errors="coerce").round(dp)
-
-    # Dropping rows that miss critical field e.g. date and coords
-    df = df.dropna(subset=["date","latitude","longitude"])
-    return df
-
 def log_free_tier_usage(elapsed_seconds: float):
     """
     Prints whether this task's runtime fits in Cloud Run's monthly free tier.
     """
-    runs_per_month = 720  # hourly update * 30 days
+    runs_per_month = 720 
     tasks = int(os.getenv("TOTAL_SHARDS", "16"))
     mem_gib = float(os.getenv("MEMORY_GIB", "1"))  
 
-    # Cloud Run free tier per month:
-    CPU_FREE = 240_000       # vCPU-seconds
-    MEM_FREE = 450_000       # GiB-seconds
+    CPU_FREE = 240_000      
+    MEM_FREE = 450_000       
 
-    cpu_allow_per_task = CPU_FREE / (tasks * runs_per_month)                # seconds
-    mem_allow_per_task = MEM_FREE / (tasks * runs_per_month * mem_gib)      # seconds
+    cpu_allow_per_task = CPU_FREE / (tasks * runs_per_month)              
+    mem_allow_per_task = MEM_FREE / (tasks * runs_per_month * mem_gib)      
 
     print({
         "task_elapsed_s": round(elapsed_seconds, 3),
@@ -92,8 +56,7 @@ def main():
 
     # Ensuring both staging and weather table exists
     # Otherwise creates them
-    ensure_weather_table()
-    ensure_staging_exists()
+    ensure_schema()
 
     # Fetch crag_ids as well as coordinate for each crag_id
     crag_ids = fetch_crag_ids_for_shard(TOTAL_SHARDS, SHARD_INDEX)

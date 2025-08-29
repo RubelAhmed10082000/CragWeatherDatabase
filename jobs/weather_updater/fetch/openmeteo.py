@@ -10,7 +10,7 @@ def fetch_weather_for_crags_staging(
     max_points: int | None = None
 ) -> pd.DataFrame:
     """
-    return in-memory dataframe ready for stage insert
+    return in-memory dataframe ready for weather stage insert
     """
     if max_points:
         crags = crags[:max_points]
