@@ -5,8 +5,16 @@ import time
 
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (
-    get_connection, ensure_schema
-) 
+    ensure_schema,
+    fetch_crag_ids_for_shard,
+    fetch_coords_for_crags,
+    load_to_staging,
+    delete_staging_batch,
+    delete_old_staging,
+    upsert_fact_window,
+    log_run_start,
+    log_run_finish,
+)
 
 # Importing both fetch and clean functions for weather data
 from jobs.weather_updater.fetch.openmeteo import fetch_weather_for_crags_staging
@@ -18,7 +26,7 @@ TOTAL_SHARDS   = int(os.getenv("TOTAL_SHARDS", "16"))
 SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", "0")))
 CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
 MAX_POINTS     = int(os.getenv("MAX_POINTS_PER_SHARD", "0")) 
-
+WINDOW_HOURS   = int(os.getenv("WINDOW_HOURS", "12")) 
                      
 # Creating chunks 
 def chunk(lst, n):
@@ -67,21 +75,10 @@ def main():
         print(f"No coords in shard {SHARD_INDEX}")
         return 
     
+    crag_tuples = [(cid, lat, lon) for cid, (lat,lon) in coords_by_id.items()]
+    
     if MAX_POINTS > 0:
-        coords = coords[:MAX_POINTS]
-    
-    # Runs API call, clean and conform for each chunk
-    parts = []
-    for group in chunk(coords, CHUNK_SIZE):
-        df = fetch_weather_data_inmem(group)
-        if not df.empty:
-            parts.append(df)
-    
-    if not parts:
-        print("No rows after cleaning/conforming")
-        return
-
-    df = pd.concat(parts, ignore_index=True)
+        crag_tuples = crag_tuples[:MAX_POINTS]
     
     # Creates batch id and run id for monitoring purposes
     batch_id = f"shard{SHARD_INDEX}_of_{TOTAL_SHARDS}__{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -89,34 +86,44 @@ def main():
     t0 = time.perf_counter()
 
     try:
-        # Stages data into stg_weatheroutes
-        # Counts rows where coordinates and crag_id is unmatched 
+        # Fetch weather rows into staging-ready DataFrames in chunks
+        parts = list[pd.DataFrame] = []
+        for group in chunk(crag_tuples, CHUNK_SIZE):
+            df = fetch_weather_for_crags_staging(group, load_batch_id=batch_id, max_points=None)
+            if df is None and not df.empty:
+                parts.append(df)
+
+        if not parts:
+            print("No rows fetched for this shard.")
+            log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="no_data")
+            return
+        
+        df_all = pd.concat(parts, ignore_index=True)
+
         staged = load_to_staging(df.to_dict(orient="records"), load_batch_id=batch_id)
-        unmatched = count_unmatched_staging(dp=DP, load_batch_id=batch_id)
+        
+        upserted, deleted = upsert_fact_window(load_batch_id=batch_id, hours=WINDOW_HOURS)
 
-        # Creates connection to DB
-        # Upserts data to dim_hourly
-        with get_connection() as conn,conn.cursor() as cur:
-            upserted = upsert_dim_hourly(cur, dp=DP, batch_id=batch_id)
-            conn.commit()
-
-        # Deletes staging values
-        deleted = delete_staging_batch(batch_id)
-        # Deletes any old staging values from previous upserts
+        deleted_staging = delete_staging_batch(batch_id)
         pruned = delete_old_staging(days=RETENTION_DAYS)
-        
-        # Logging run
-        log_run_finish(run_id, staged=staged, unmatched=unmatched, upserted=upserted, status="success")
-        print({"staged": staged, "unmatched": unmatched, "upserted": upserted, "deleted": deleted, "pruned": pruned})
-        
+
+        log_run_finish(run_id, staged=staged, unmatched=0, upserted=upserted, status="success")
+        print({
+            "staged": staged,
+            "upserted": upserted,
+            "deleted_in_window": deleted,
+            "deleted_staging": deleted_staging,
+            "pruned_staging_older_days": pruned
+        })
 
     except Exception as e:
         log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status=f"failed: {e}")
         raise
     finally:
-        # Ensure run stays in free-tier territory
         elapsed = time.perf_counter() - t0
         log_free_tier_usage(elapsed)
+
+       
 
 if __name__ == "__main__":
     main()
