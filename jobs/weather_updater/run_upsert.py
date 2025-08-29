@@ -87,10 +87,10 @@ def main():
 
     try:
         # Fetch weather rows into staging-ready DataFrames in chunks
-        parts = list[pd.DataFrame] = []
+        parts = []
         for group in chunk(crag_tuples, CHUNK_SIZE):
             df = fetch_weather_for_crags_staging(group, load_batch_id=batch_id, max_points=None)
-            if df is None and not df.empty:
+            if df is not None and not df.empty:
                 parts.append(df)
 
         if not parts:
@@ -100,7 +100,7 @@ def main():
         
         df_all = pd.concat(parts, ignore_index=True)
 
-        staged = load_to_staging(df.to_dict(orient="records"), load_batch_id=batch_id)
+        staged = load_to_staging(df_all.to_dict(orient="records"), load_batch_id=batch_id)
         
         upserted, deleted = upsert_fact_window(load_batch_id=batch_id, hours=WINDOW_HOURS)
 
