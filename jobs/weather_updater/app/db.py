@@ -285,12 +285,12 @@ def _ensure_views(conn):
 """)
     
 
-def fetch_crag_ids_for_shard(total_shard: int,  shard_index: int) -> list[str]:
+def fetch_crag_ids_for_shard(total_shards: int,  shard_index: int) -> list[str]:
     """
     Derives shard indexed from crag_ids in public.dimcrags.
 
     When upserting crags will be split into shards and weather data
-    with be upserted for each of the 16 crags concurrently.
+    with be upserted for each of the 16 shards concurrently.
 
 
     """
@@ -301,20 +301,20 @@ def fetch_crag_ids_for_shard(total_shard: int,  shard_index: int) -> list[str]:
 """
 
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, {"total": total_shard, "idx":shard_index})
+        cur.execute(sql, {"total": total_shards, "idx":shard_index})
         return [r["crag_id"] for r in cur.fetchall()]
     
-def fetch_coords_for_crags(crag_id: Iterable[str]) -> dict[str,tuple[float, float]]:
+def fetch_coords_for_crags(crag_ids: Iterable[str]) -> dict[str,tuple[float, float]]:
     """
     Fetching list of longitude and latitude coordinates from dimcrags
     """
-    ids = list(crag_id)
-    if not id:
+    ids = list(crag_ids)
+    if not ids:
         return {}
     sql = """
       SELECT crag_id::text AS crag_id, latitude, longitude
       FROM public.dimcrags
-      WHERE crag_id = ANY(%(id)s) AND latitude IS NOT NULL and longitude IS NOT NULL
+      WHERE crag_id = ANY(%(ids)s) AND latitude IS NOT NULL and longitude IS NOT NULL
     """
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, {"ids":ids})
@@ -334,7 +334,7 @@ def load_to_staging(rows: Iterable[Mapping[str,Any]], load_batch_id: str, batch_
             "windspeed_ms","crag_id","longitude","latitude","load_batch_id"]
     inserted = 0
 
-    with get_connection() as conn, conn.cursor as cur:
+    with get_connection() as conn, conn.cursor() as cur:
         for i in range (0, len(rows), batch_size):
             chunk = rows[i:i+batch_size]
             values = [
@@ -355,7 +355,7 @@ def load_to_staging(rows: Iterable[Mapping[str,Any]], load_batch_id: str, batch_
             inserted += cur.rowcount if cur.rowcount is not None else 0 
     return inserted
 
-def delete_staging_bathc(load_batch_id:str) -> int:
+def delete_staging_batch(load_batch_id:str) -> int:
     """
     Deletes load batches
     """
@@ -382,9 +382,9 @@ def upsert_fact_window(cir, load_batch_id: str, hours: int = 12) -> tuple[int, i
     """
     with get_connection() as conn, conn.cursor() as cur:
       cur.execute("SET application_name = 'cragcast_upsert_window'")
-      cur.execute("SELECT date_trunc('hour, now() AT TIME ZONE 'UTC') AS w_start")
+      cur.execute("SELECT date_trunc('hour', now() AT TIME ZONE 'UTC') AS w_start")
       window_start = cur.fetchone()["w_start"]
-      cur.execute("SELECT %(ws)s + (%(h)s) || ' hours')::interval as w_end", 
+      cur.execute("SELECT %(ws)s + (%(h)s || ' hours')::interval as w_end", 
                   {"ws": window_start, "h": hours})
       window_end = cur.fetchone()["w_end"]
 
@@ -397,7 +397,7 @@ def upsert_fact_window(cir, load_batch_id: str, hours: int = 12) -> tuple[int, i
       # Delete weather data window for crags within window
       cur.execute("""
       WITH del AS (
-        DELETE FROM public.fact_crag_hourly weather f
+        DELETE FROM public.fact_crag_hourly_weather f
         USING _batch_crags bc
         WHERE f.crag_id = bc.crag_id
           AND f.date >= %(ws)s AND f.date < %(we)s
@@ -424,7 +424,7 @@ def upsert_fact_window(cir, load_batch_id: str, hours: int = 12) -> tuple[int, i
           s.load_batch_id,
           %(ws)s AS forecast_run_ts,
             EXTRACT(EPOCH FROM (s.date - %(ws)s))::int / 3600 AS horizon_hours
-        FROM public.stg_weather_route
+        FROM public.stg_weather_route s
         JOIN _batch_crags bc USING (crag_id)
         WHERE s.load_batch_id = %(b)s
         AND s.date >= %(ws)s AND s.date < %(we)s
@@ -434,15 +434,15 @@ def upsert_fact_window(cir, load_batch_id: str, hours: int = 12) -> tuple[int, i
 
       return inserted, deleted
 
-def long_run_start(batch_id:str, dp: int) -> str:
+def log_run_start(batch_id:str, dp: int) -> str:
     """
-    Logging runs in crag_run_logs at start of upsert
+    Logging runs in crag_runs_logs at start of upsert
     """
 
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
-        INSERT INTO public.crag_run_logs (job_name, status, notes)           
-        VALUES ('weather_updated', 'running', %(n)s)
+        INSERT INTO public.crag_runs_logs (job_name, status, notes)           
+        VALUES ('weather_updater', 'running', %(n)s)
         RETURNING run_id::text
         """, {"n":f"batch={batch_id}, dp={dp}"})
         return cur.fetchone()["run_id"]
@@ -451,12 +451,12 @@ def log_run_finish(run_id: str, staged: int, unmatched: int, upserted: int,
                    status:str):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
-        UPDATE public.crag_run_logs
+        UPDATE public.crag_runs_logs
           SET status = %(n)s,
                     notes = %(n)s,
                     finished_at = now()
-        WHERE run_id = %(id)s::uuid
-        """, {"s":status, "n":f"staged={staged}, unmatched={unmatched}, upserted={upserted}", "id": run_id})
+        WHERE run_id = %(ids)s::uuid
+        """, {"s":status, "n":f"staged={staged}, unmatched={unmatched}, upserted={upserted}", "ids": run_id})
     
 
 
