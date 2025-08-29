@@ -175,6 +175,7 @@ def _ensure_tables(conn):
             precipitation_mm NUMERIC(6,2),
             windspeed_ms REAL,
             load_ts TIMESTAMPTZ DEFAULT now(),
+            last_updated_ts TIMESTAMPTZ DEFAULT now(),
             load_batch_id TEXT NOT NULL,
             forecast_run_ts TIMESTAMPTZ,
             horizon_hours INT,
@@ -431,27 +432,62 @@ def upsert_fact_window(load_batch_id: str, hours: int = 12) -> tuple[int, int]:
             SELECT DISTINCT crag_id
             FROM public.stg_weather_route
             WHERE load_batch_id = %(b)s
+          ),
+                    
+          src AS (
+            SELECT
+              crag_id,
+              date,
+              temperature_c,
+              relative_humidity_percentage,
+              precipitation_mm,
+              windspeed_ms,
+              now() AS load_ts,          
+              load_batch_id,
+              %(ws)s::timestamptz AS forecast_run_ts,
+              (EXTRACT(EPOCH FROM (s.date - %(ws)s::timestamptz)) / 3600.0)::int AS horizon_hours
+            FROM public.stg_weather_route s
+            JOIN batch_crags bc USING (crag_id)
+            WHERE s.load_batch_id = %(b)s
+              AND s.date >= %(ws)s::timestamptz
+              AND s.date <  %(we)s::timestamptz
           )
-          INSERT INTO public.fact_crag_hourly_weather
-            (crag_id, date, temperature_c, relative_humidity_percentage,
-             precipitation_mm, windspeed_ms, load_ts, load_batch_id,
-             forecast_run_ts, horizon_hours)
+          
+          INSERT INTO public.fact_crag_hourly_weather (
+            crag_id, date, temperature_c, relative_humidity_percentage,
+            precipitation_mm, windspeed_ms, load_ts, load_batch_id,
+            forecast_run_ts, horizon_hours
+            )
+                    
           SELECT
-            s.crag_id,
-            s.date,
-            s.temperature_c,
-            s.relative_humidity_percentage,
-            s.precipitation_mm,
-            s.windspeed_ms,
-            now(),
-            s.load_batch_id,
-            %(ws)s::timestamptz AS forecast_run_ts,
-            (EXTRACT(EPOCH FROM (s.date - %(ws)s::timestamptz)) / 3600.0)::int AS horizon_hours
-          FROM public.stg_weather_route s
-          JOIN batch_crags bc USING (crag_id)
-          WHERE s.load_batch_id = %(b)s
-            AND s.date >= %(ws)s::timestamptz AND s.date < %(we)s::timestamptz
-          ORDER BY s.crag_id, s.date
+            crag_id,
+            date,
+            temperature_c,
+            relative_humidity_percentage,
+            precipitation_mm,
+            windspeed_ms,
+            load_ts,
+            load_batch_id,
+            forecast_run_ts,
+            horizon_hours
+          FROM src
+          ON CONFLICT (crag_id, date) DO UPDATE
+          SET
+          temperature_c = EXCLUDED.temperature_c,
+          relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
+          precipitation_mm = EXCLUDED.precipitation_mm,
+          windspeed_ms = EXCLUDED.windspeed_ms,
+          load_batch_id = EXCLUDED.load_batch_id,
+          forecast_run_ts = EXCLUDED.forecast_run_ts,
+          horizon_hours = EXCLUDED.horizon_hours,
+          last_updated_ts = now()
+          WHERE
+          fact_crag_hourly_weather.temperature_c IS DISTINCT FROM EXCLUDED.temperature_c
+          OR fact_crag_hourly_weather.relative_humidity_percentage IS DISTINCT FROM EXCLUDED.relative_humidity_percentage
+          OR fact_crag_hourly_weather.precipitation_mm IS DISTINCT FROM EXCLUDED.precipitation_mm
+          OR fact_crag_hourly_weather.windspeed_ms IS DISTINCT FROM EXCLUDED.windspeed_ms
+          OR fact_crag_hourly_weather.forecast_run_ts IS DISTINCT FROM EXCLUDED.forecast_run_ts
+          OR fact_crag_hourly_weather.horizon_hours IS DISTINCT FROM EXCLUDED.horizon_hours;
         """, {"b": load_batch_id, "ws": window_start, "we": window_end})
         inserted = cur.rowcount or 0
 
