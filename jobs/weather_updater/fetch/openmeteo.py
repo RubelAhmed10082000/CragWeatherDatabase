@@ -10,14 +10,14 @@ def fetch_weather_for_crags_staging(
     max_points: int | None = None
 ) -> pd.DataFrame:
     """
-    Eeturns dataframe reading for stage insert
+    return in-memory dataframe ready for stage insert
     """
     if max_points:
         crags = crags[:max_points]
     if not crags:
         return pd.DataFrame(columns=[
             "date","precipitation_mm","temperature_c","relative_humidity_percentage",
-            "wind_speed_ms","crag_id","longitude","latitude","load_batch_id"
+            "windspeed_ms","crag_id","longitude","latitude","load_batch_id"
         ])
 
     cache_session = requests_cache.CachedSession("/tmp/.cache", expire_after=3600)
@@ -82,5 +82,5 @@ def fetch_weather_for_crags_staging(
 
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=[
         "date","precipitation_mm","temperature_c","relative_humidity_percentage",
-        "wind_speed_ms","crag_id","longitude","latitude","load_batch_id"
+        "windspeed_ms","crag_id","longitude","latitude","load_batch_id"
     ])
