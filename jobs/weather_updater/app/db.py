@@ -44,7 +44,8 @@ ROCK_TYPES = ['Gritstone',
             'Iron Rock',
             'Ignimbrite',
             'Microgranite',
-            'Psammite']
+            'Psammite',
+            'Other']
 
 CLIMBING_STYLES =['Bouldering',
             'Trad',
@@ -58,7 +59,8 @@ CLIMBING_STYLES =['Bouldering',
             'Aid',
             'Ice',
             'Alpine',
-            'Via Ferrata']
+            'Via Ferrata',
+            'Other']
 
 UNKNOWNS = {"UNKNOWN", "UNK", "N/A", "NA", ""}
 
@@ -314,9 +316,9 @@ def fetch_crag_ids_for_shard(total_shards: int,  shard_index: int) -> list[str]:
 
     """
     sql = """
-      SELECT crag_id::text
+      SELECT crag_id::text 
       FROM public.dimcrags
-      WHERE (fnv32(crag_id::text)::int % %(total)s) = %(idx)s
+      WHERE mod(abs(fnv64(crag_id::string)), %(total)s) = %(idx)s
 """
 
     with get_connection() as conn, conn.cursor() as cur:

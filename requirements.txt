@@ -12,3 +12,4 @@ google-cloud-storage
 pydantic_settings
 psycopg[binary]==3.2.9
 fsspec
+httpx[http2]

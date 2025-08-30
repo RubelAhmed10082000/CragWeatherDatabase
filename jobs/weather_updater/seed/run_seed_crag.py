@@ -20,32 +20,40 @@ def _canon_str(x: Optional[str]) -> Optional[str]:
     return None if s == "" or s.upper() in UNKNOWNS else s
 
 def _round_or_none(x: Optional[float], nd: int = 6) -> Optional[float]:
-    try:
-        if x is None:
+        if x is None or pd.isna(x):
             return None
         return round(float(x), nd)
-    except Exception:
-        return None
 
 def _uuid5(ns: str, key: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"cragcast:{ns}:{key}"))
 
 def _stable_crag_id(crag_name: str | None, county: str | None,
-                    lat: float | None, lon: float | None) -> str:
+                    latitude: float | None, longitude: float | None) -> str:
     """
     As crag_df.parquet does not have a crag_id, this derives a unique id from both latitude, longitude, name and county
     """
-    key = f"{(crag_name or '').lower()}|{(county or '').lower()}|{lat if lat is not None else ''}|{lon if lon is not None else ''}"
+    key = f"{(crag_name or '').lower()}|{(county or '').lower()}|{latitude if latitude is not None else ''}|{longitude if longitude is not None else ''}"
     return _uuid5("crag", key)
+
+def _s(v) -> str:
+    if v is None:
+        return ""
+    try:
+        if pd.isna(v):
+            return ""
+    except Exception:
+        pass
+    return str(v)
+
 
 def _route_uuid(route_id: Optional[str], route_name: str | None,
                 crag_name: str | None, difficulty_grade: str | None, safety_grade: str | None) -> str:
-    try:
-        if route_id:
+    if route_id is not None:
+        try:
             return str(uuid.UUID(str(route_id)))
-    except Exception:
-        pass
-    key = f"{route_name or ''}|{crag_name or ''}|{difficulty_grade or ''}|{safety_grade or ''}"
+        except Exception:
+            pass
+    key = f"{_s(route_name)}|{_s(crag_name)}|{_s(difficulty_grade)}|{_s(safety_grade)}"
     return _uuid5("route", key)
 
 def _normalize_vocab(val: Optional[str], allowed: list[str] | None) -> Optional[str]:
@@ -90,10 +98,10 @@ def insert_crags(conn, crags_df: pd.DataFrame, batch_size: int = 5000):
             cur.executemany(sql, batch)
 
 def insert_routes(conn, routes_df: pd.DataFrame, batch_size: int = 5000):
-    cols = ["route_id","crag_id","route_name","difficulty_grade","safety_grade"]
+    cols = ["route_id","crag_id","route_name","grade","safety_grade"]
     records = [tuple(row[c] for c in cols) for _, row in routes_df[cols].iterrows()]
     sql = """
-        INSERT INTO public.dimroutes (route_id, crag_id, route_name, difficulty_grade, safety_grade)
+        INSERT INTO public.dimroutes (route_id, crag_id, route_name, grade, safety_grade)
         VALUES (%s,%s,%s,%s,%s)
         ON CONFLICT (route_id) DO NOTHING
     """
@@ -140,11 +148,15 @@ def main():
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
 
+    df["difficulty_grade"] = df["difficulty_grade"].apply(_canon_str)
+    df["safety_grade"] = df["safety_grade"].apply(_canon_str)
+
+
     df["lat_r"] = df["latitude"].apply(lambda x: _round_or_none(x, args.dp))
     df["lon_r"] = df["longitude"].apply(lambda x: _round_or_none(x, args.dp))
 
     df["crag_id"] = [
-        _stable_crag_id(r.crag_name, r.county, r.lat_r, r.lon_r)
+        _stable_crag_id(r.crag_name, r.county, r.latitude, r.longitude)
         for r in df.itertuples(index=False)
     ]
     df["route_id_uuid"] = [
@@ -161,11 +173,43 @@ def main():
     )
 
     routes_df = df[["route_id_uuid", "crag_id", "route_name", "difficulty_grade", "safety_grade"]]
-    routes_df = routes_df.dropna(subset=["route_name"]).rename(columns={"route_id_uuid": "route_id"})
+    routes_df = routes_df.dropna(subset=["route_name"]).rename(columns={"route_id_uuid": "route_id", "difficulty_grade":"grade"})
 
     print(f"Found unique crags: {len(crag_df)}; routes: {len(routes_df)}")
     if args.dry_run:
+        print("\n=== DRY RUN VALIDATION ===")
+
+        # NULL audit: crags
+        print("\n[crag_df] null counts per column:")
+        print(crag_df.isnull().sum())
+
+        # NULL audit: routes
+        print("\n[routes_df] null counts per column:")
+        print(routes_df.isnull().sum())
+
+        # Duplicate check (natural key for crags)
+        dups = (
+            crag_df
+            .groupby(["crag_name", "county", "latitude", "longitude"])
+            .size()
+            .reset_index(name="count")
+            .query("count > 1")
+        )
+        print(f"\nDuplicate crag rows by natural key: {len(dups)}")
+        if not dups.empty:
+            print(dups.head())
+
+        # Counts
+        print(f"\nCandidate crag_df count: {len(crag_df)}")
+        print(f"Candidate routes_df count: {len(routes_df)}")
+
+        # optional: write debug parquet for inspection
+        # crag_df.to_parquet(\"test_crags.parquet\")
+        # routes_df.to_parquet(\"test_routes.parquet\")
+
+        print("\n=== END DRY RUN VALIDATION ===")
         return
+    
 
     ensure_schema()
 

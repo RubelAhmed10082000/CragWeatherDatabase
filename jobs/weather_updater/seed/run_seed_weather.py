@@ -47,18 +47,23 @@ async def fetch_shard_rows(crag_ids: Iterable[str], coords: Dict[str, Tuple[floa
     rows: List[Dict[str, Any]] = []
 
     async with httpx.AsyncClient(http2=True) as client:
+
         async def run_one(cid: str):
+
             lat, lon = coords[cid]
+
             async with sem:
                 try:
                     rs = await fetch_one(client, cid, lat, lon, t0, hours)
                     return rs
                 except Exception:
                     return []
-    tasks = [asyncio.create_task(run_one(cid)) for cid in crag_ids if cid in coords]
-    for coro in asyncio.as_completed(tasks):
-        rows.extend(await coro)
-        return rows
+                
+        tasks = [asyncio.create_task(run_one(cid)) for cid in crag_ids if cid in coords]
+        for coro in asyncio.as_completed(tasks):
+            rows.extend(await coro)
+
+    return rows
 
 def chunked(iterable, n):
     """
@@ -82,12 +87,24 @@ def main():
     ap.add_argument("--concurrency", type=int, default=16, help="Concurrent API calls")
     ap.add_argument("--stage-batch-size", type=int, default=5000, help="Insert batch size for staging")
     ap.add_argument("--dry-run", action="store_true", help="Fetch & count but do not write to DB")
+    ap.add_argument("--t0", type=str, default=None,
+                    help="Anchor time in UTC (e.g. 2025-08-30T12:00Z). If omitted, defaults to now floored to the hour.")
     args = ap.parse_args()
 
     ensure_schema()
 
+    def parse_t0(s: str) -> datetime:
+        s = s.strip().replace('Z','')
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.replace(minute=0, second=0, microsecond=0)
+
     # Floors datetime to the nearest hour and becomes start time for the batch
-    t0 = floor_hour_utc(datetime.now(timezone.utc))
+    t0 = parse_t0(args.t0) if args.t0 else floor_hour_utc(datetime.now(timezone.utc))
+
     # Builds a string that contains the seed, the forecast time and the shard index
     load_batch_id = f"seed_{t0.strftime('%Y%m%d%H')}_sh{args.shard_index}"
 
