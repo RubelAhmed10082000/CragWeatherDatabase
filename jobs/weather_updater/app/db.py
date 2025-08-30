@@ -251,6 +251,32 @@ def _ensure_views(conn):
     """
     Ensure views exists otherwise creates them
     """
+
+  # View for RU obersvability daily usage
+    run_sql(conn, """
+      CREATE OR REPLACE VIEW public.v_ru_usage_daily AS
+      SELECT
+        date_trunc('day', started_at) AS day,
+        sum(ru_estimate)              AS ru_estimated,
+        count(*)                      AS runs
+      FROM public.crag_runs_logs
+      WHERE ru_estimate IS NOT NULL
+      GROUP BY 1
+      ORDER BY 1 DESC;
+      """)
+    
+    # View for RU observaibility monthly usage
+    run_sql(conn, """
+    CREATE OR REPLACE VIEW public.v_ru_usage_monthly AS
+    SELECT
+      date_trunc('month', started_at) AS month,
+      sum(ru_estimate)                AS ru_estimated,
+      count(*)                        AS runs
+    FROM public.crag_runs_logs
+    WHERE ru_estimate IS NOT NULL
+    GROUP BY 1
+    ORDER BY 1 DESC;
+    """)
   
   # routes + crags
 
@@ -575,15 +601,26 @@ def log_run_start(batch_id:str, dp: int) -> str:
         return cur.fetchone()["run_id"]
 
 def log_run_finish(run_id: str, staged: int, unmatched: int, upserted: int,
-                   status:str):
+                   status:str, rows_inserted: int, ru_per_k:float, rows_updated: int, rows_deleted: int, ru_estimate: int):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("""
         UPDATE public.crag_runs_logs
           SET status = %(s)s,
                     notes = %(n)s,
                     finished_at = now()
+                    rows_inserted = COALESCE(%(ri)s, rows_inserted),
+                    rows_updated  = COALESCE(%(ru)s, rows_updated),
+                    rows_deleted  = COALESCE(%(rd)s, rows_deleted),
+                    ru_estimate   = COALESCE(%(rue)s, ru_estimate),
+                    ru_per_k      = COALESCE(%(ruk)s, ru_per_k)
         WHERE run_id = %(ids)s::uuid
-        """, {"s":status, "n":f"staged={staged}, unmatched={unmatched}, upserted={upserted}", "ids": run_id})
+        """, {
+            "s": status,
+            "n": f"staged={staged}, unmatched={unmatched}, upserted={upserted}",
+            "ri": rows_inserted, "ru": rows_updated, "rd": rows_deleted,
+            "rue": ru_estimate, "ruk": ru_per_k,
+            "ids": run_id
+        })
     
 
 

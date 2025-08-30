@@ -106,8 +106,17 @@ def main():
 
         deleted_staging = delete_staging_batch(batch_id)
         pruned = delete_old_staging(days=RETENTION_DAYS)
+        RU_PER_K = float(os.getenv("RU_PER_K", "18000"))
+        rows_inserted = upserted
+        rows_deleted  = deleted 
+        rows_updated  = 0  
 
-        log_run_finish(run_id, staged=staged, unmatched=0, upserted=upserted, status="success")
+        ru_estimate = int(((rows_inserted + rows_deleted + rows_updated) / 1000.0) * RU_PER_K)
+
+
+        log_run_finish(run_id, staged=staged, unmatched=0, upserted=upserted, status="success",
+                       rows_inserted=rows_inserted, rows_deleted=rows_deleted, rows_updated=rows_updated,
+                       ru_estimate=ru_estimate, ru_per_k=RU_PER_K)
         print({
             "staged": staged,
             "upserted": upserted,
