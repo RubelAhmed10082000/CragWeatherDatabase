@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timezone
 import pandas as pd
 import time
+import math
 
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (

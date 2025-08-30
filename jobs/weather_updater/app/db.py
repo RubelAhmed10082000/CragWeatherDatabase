@@ -609,38 +609,38 @@ def log_run_start(batch_id:str, dp: int) -> str:
         """, {"n":f"batch={batch_id}, dp={dp}"})
         return cur.fetchone()["run_id"]
 
-    def log_run_finish(
-        run_id: str,
-        staged: int,
-        unmatched: int,
-        upserted: int,
-        status: str,
-        *,  # keyword-only (optional) metrics from here down
-        rows_inserted: int | None = None,
-        rows_updated: int | None = None,
-        rows_deleted: int | None = None,
-        ru_estimate: int | None = None,
-        ru_per_k: float | None = None,
-    ):
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("""
-            UPDATE public.crag_runs_logs
-              SET status = %(s)s,
-                        notes = %(n)s,
-                        finished_at = now(),
-                        rows_inserted = COALESCE(%(ri)s, rows_inserted),
-                        rows_updated  = COALESCE(%(ru)s, rows_updated),
-                        rows_deleted  = COALESCE(%(rd)s, rows_deleted),
-                        ru_estimate   = COALESCE(%(rue)s, ru_estimate),
-                        ru_per_k      = COALESCE(%(ruk)s, ru_per_k)
-            WHERE run_id = %(ids)s::uuid
-            """, {
-                "s": status,
-                "n": f"staged={staged}, unmatched={unmatched}, upserted={upserted}",
-                "ri": rows_inserted, "ru": rows_updated, "rd": rows_deleted,
-                "rue": ru_estimate, "ruk": ru_per_k,
-                "ids": run_id
-            })
+def log_run_finish(
+    run_id: str,
+    staged: int,
+    unmatched: int,
+    upserted: int,
+    status: str,
+    *,  # keyword-only (optional) metrics from here down
+    rows_inserted: int | None = None,
+    rows_updated: int | None = None,
+    rows_deleted: int | None = None,
+    ru_estimate: int | None = None,
+    ru_per_k: float | None = None,
+):
+  with get_connection() as conn, conn.cursor() as cur:
+      cur.execute("""
+      UPDATE public.crag_runs_logs
+        SET status = %(s)s,
+                  notes = %(n)s,
+                  finished_at = now(),
+                  rows_inserted = COALESCE(%(ri)s, rows_inserted),
+                  rows_updated  = COALESCE(%(ru)s, rows_updated),
+                  rows_deleted  = COALESCE(%(rd)s, rows_deleted),
+                  ru_estimate   = COALESCE(%(rue)s, ru_estimate),
+                  ru_per_k      = COALESCE(%(ruk)s, ru_per_k)
+      WHERE run_id = %(ids)s::uuid
+      """, {
+          "s": status,
+          "n": f"staged={staged}, unmatched={unmatched}, upserted={upserted}",
+          "ri": rows_inserted, "ru": rows_updated, "rd": rows_deleted,
+          "rue": ru_estimate, "ruk": ru_per_k,
+          "ids": run_id
+      })
         
 
 
