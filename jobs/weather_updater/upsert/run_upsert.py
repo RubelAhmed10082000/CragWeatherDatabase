@@ -1,8 +1,6 @@
 import os 
 from datetime import datetime, timezone
-import pandas as pd
 import time
-import math
 
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (
@@ -14,8 +12,11 @@ from jobs.weather_updater.app.db import (
     delete_old_staging,
     upsert_fact_window,
     log_run_start,
-    log_run_finish,
+    log_run_finish
 )
+
+from jobs.weather_updater.geo.quantize import quantized_fetch_to_df
+
 
 # Importing both fetch and clean functions for weather data
 from jobs.weather_updater.fetch_weather_data.openmeteo_upsert import fetch_weather_for_crags_staging
@@ -88,18 +89,22 @@ def main():
 
     try:
         # Fetch weather rows into staging-ready DataFrames in chunks
-        parts = []
-        for group in chunk(crag_tuples, CHUNK_SIZE):
-            df = fetch_weather_for_crags_staging(group, load_batch_id=batch_id, max_points=None)
-            if df is not None and not df.empty:
-                parts.append(df)
+        cell_deg = float(os.getenv("CELL_DEG", "0.25"))               # ~28km cells
+        max_cells = int(os.getenv("MAX_CELLS_PER_SHARD", "0"))        # 0 = all cells
 
-        if not parts:
-            print("No rows fetched for this shard.")
+        df_all, cells_hit, crags_covered = quantized_fetch_to_df(
+            coords_by_id=coords_by_id,
+            batch_id=batch_id,
+            fetch_fn=fetch_weather_for_crags_staging,  # existing helper
+            chunk_size=CHUNK_SIZE,
+            cell_deg=cell_deg,
+            max_cells=max_cells,
+        )
+
+        if df_all.empty:
+            print(f"No rows fetched (cells={cells_hit}, crags_covered={crags_covered}).")
             log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="no_data")
             return
-        
-        df_all = pd.concat(parts, ignore_index=True)
 
         staged = load_to_staging(df_all.to_dict(orient="records"), load_batch_id=batch_id)
         

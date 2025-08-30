@@ -1,5 +1,4 @@
-# Using Python 3.13 as a base
-FROM python:3.13-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,22 +7,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update -y && apt-get install -y --no-install-recommends \
-      ca-certificates \
+RUN apt-get update -y && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Installing deps
+# install deps
 COPY requirements.txt /app/requirements.txt
-RUN python -m pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN python -m pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-COPY . /app
-CMD ["python", "-m", "jobs.weather_updater.run_shard"]
-
+# create non-root user before copying code; copy with ownership once
 RUN useradd -m appuser
 USER appuser
-
 COPY --chown=appuser:appuser . /app
+
+# default command -> upsert runner
+ENTRYPOINT ["python","-m","jobs.weather_updater.upsert.run_upsert"]
 
 
 

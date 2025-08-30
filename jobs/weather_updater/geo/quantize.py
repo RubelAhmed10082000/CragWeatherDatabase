@@ -4,8 +4,8 @@ import math
 from typing import Dict, Tuple, List, Callable, Optional
 import pandas as pd
 
-Triple = Tuple[str, float, float]                # (crag_id, lat, lon)
-CoordsById = Dict[str, Tuple[float, float]]      # crag_id -> (lat, lon)
+Triple = Tuple[str, float, float]           # (crag_id, lat, lon)
+CoordsById = Dict[str, Tuple[float, float]] # crag_id -> (lat, lon)
 
 def _cell_key(lat: float, lon: float, deg: float) -> Tuple[float, float]:
     return (math.floor(lat / deg) * deg, math.floor(lon / deg) * deg)
@@ -27,17 +27,18 @@ def quantized_fetch_to_df(
     max_cells: int = 0,  # 0 = all
 ) -> tuple[pd.DataFrame, int, int]:
     """
+    Fetch once per grid cell (using a representative crag), then fan out rows to all crags in that cell.
+
     Returns:
-      df_all: DataFrame ready for staging (rows for *all* crags via fan-out)
-      cells_hit: number of grid cells fetched (API calls ≈ this, divided by chunking)
-      crags_covered: total crags represented by those cells
+      df_all        -> DataFrame ready for staging with rows for *all* crags
+      cells_hit     -> number of grid cells fetched
+      crags_covered -> total crags represented by those cells
     """
     cells = group_crags_into_cells(coords_by_id, cell_deg)
     cell_keys = list(cells.keys())
     if max_cells and max_cells > 0:
         cell_keys = cell_keys[:max_cells]
 
-    # representative per cell + map to members
     reps: List[Triple] = []
     rep_map: Dict[str, List[Triple]] = {}
     for k in cell_keys:
@@ -46,7 +47,6 @@ def quantized_fetch_to_df(
         reps.append(rep)
         rep_map[rep[0]] = members
 
-    # fetch representatives
     dfs: List[pd.DataFrame] = []
     for i in range(0, len(reps), chunk_size):
         group = reps[i : i + chunk_size]
@@ -58,7 +58,6 @@ def quantized_fetch_to_df(
 
     df_reps = pd.concat(dfs, ignore_index=True)
 
-    # fan-out rows to all members in each cell
     out_parts: List[pd.DataFrame] = []
     for rep_cid, members in rep_map.items():
         rep_rows = df_reps[df_reps["crag_id"] == rep_cid]
