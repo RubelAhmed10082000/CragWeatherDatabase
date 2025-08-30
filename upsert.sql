@@ -1,6 +1,0 @@
-﻿-- upsert.sql (paste the final SQL here)
-WITH batch_crags AS ( ... )
-...
-ON CONFLICT (crag_id, date) DO UPDATE
-SET ...
-WHERE ...;
