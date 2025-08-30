@@ -17,7 +17,7 @@ from jobs.weather_updater.app.db import (
 )
 
 # Importing both fetch and clean functions for weather data
-from jobs.weather_updater.fetch.openmeteo import fetch_weather_for_crags_staging
+from jobs.weather_updater.fetch_weather_data.openmeteo_upsert import fetch_weather_for_crags_staging
 
 # Importing env variables
 DP             = int(os.getenv("DP", "6"))
