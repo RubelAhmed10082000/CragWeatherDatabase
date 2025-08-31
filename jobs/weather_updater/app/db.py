@@ -448,21 +448,25 @@ def upsert_fact_window(load_batch_id: str, hours: int = 12) -> tuple[int, int]:
         window_end = cur.fetchone()["w_end"]
 
         cur.execute("""
-          WITH batch_crags AS (
-            SELECT DISTINCT crag_id
-            FROM public.stg_weather_route
-            WHERE load_batch_id = %(b)s
-          ),
-          del AS (
-            DELETE FROM public.fact_crag_hourly_weather f
-            USING batch_crags bc
-            WHERE f.crag_id = bc.crag_id
-              AND f.date >= %(ws)s::timestamptz AND f.date < %(we)s::timestamptz
-            RETURNING 1
-          )
-          SELECT count(*) AS c FROM del
+          DELETE FROM public.fact_crag_hourly_weather f
+          WHERE f.date >= %(ws)s::timestamptz
+            AND f.date <  %(we)s::timestamptz
+            AND EXISTS (
+              SELECT 1
+              FROM public.stg_weather_route s
+              WHERE s.load_batch_id = %(b)s
+                AND s.crag_id = f.crag_id
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.stg_weather_route s
+              WHERE s.load_batch_id = %(b)s
+                AND s.crag_id = f.crag_id
+                AND s.date = f.date
+            );
         """, {"b": load_batch_id, "ws": window_start, "we": window_end})
-        deleted = cur.fetchone()["c"]
+        deleted = cur.rowcount or 0
+
 
         cur.execute("""
           WITH batch_crags AS (

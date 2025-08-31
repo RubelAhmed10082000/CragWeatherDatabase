@@ -83,7 +83,10 @@ def main():
         crag_tuples = crag_tuples[:MAX_POINTS]
     
     # Creates batch id and run id for monitoring purposes
-    batch_id = f"shard{SHARD_INDEX}_of_{TOTAL_SHARDS}__{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    batch_id = os.getenv(
+    "BATCH_ID",
+    f"shard{SHARD_INDEX}_of_{TOTAL_SHARDS}__{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+)
     run_id = log_run_start(batch_id, DP)
     t0 = time.perf_counter()
 
@@ -110,7 +113,10 @@ def main():
         
         upserted, deleted = upsert_fact_window(load_batch_id=batch_id, hours=WINDOW_HOURS)
 
-        deleted_staging = delete_staging_batch(batch_id)
+        if os.getenv("KEEP_STAGING", "0") == "1":
+            deleted_staging = 0
+        else:
+            deleted_staging = delete_staging_batch(batch_id)
         pruned = delete_old_staging(days=RETENTION_DAYS)
         RU_PER_K = float(os.getenv("RU_PER_K", "18000"))
         rows_inserted = upserted

@@ -5,12 +5,14 @@ from retry_requests import retry
 import openmeteo_requests
 
 def fetch_weather_for_crags_staging(
-    crags: List[Tuple[str, float, float]],   
+    crags: List[Tuple[str, float, float]],
     load_batch_id: str,
     max_points: int | None = None
 ) -> pd.DataFrame:
     """
-    return in-memory dataframe ready for weather stage insert
+    Return in-memory dataframe ready for weather stage insert.
+    Columns: date, precipitation_mm, temperature_c, relative_humidity_percentage,
+             windspeed_ms, crag_id, longitude, latitude, load_batch_id
     """
     if max_points:
         crags = crags[:max_points]
@@ -25,7 +27,7 @@ def fetch_weather_for_crags_staging(
     client = openmeteo_requests.Client(session=retry_session)
 
     url = "https://api.open-meteo.com/v1/forecast"
-    now_hour = pd.Timestamp.utcnow().floor("H")
+    now_hour = pd.Timestamp.utcnow().floor("h")
     frames: list[pd.DataFrame] = []
 
     for crag_id, lat, lon in crags:
@@ -33,7 +35,8 @@ def fetch_weather_for_crags_staging(
             "latitude": float(lat),
             "longitude": float(lon),
             "timezone": "UTC",
-            "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation", "wind_speed_10m"],
+            # ✅ correct Open-Meteo hourly variable names
+            "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation", "windspeed_10m"],
             "windspeed_unit": "ms",
             "precipitation_unit": "mm",
         }
@@ -48,21 +51,25 @@ def fetch_weather_for_crags_staging(
                 inclusive="left",
             )
 
+            # Build df directly from the ordered variables requested above
             df = pd.DataFrame({
                 "date": idx,
                 "temperature_c": hourly.Variables(0).ValuesAsNumpy(),
                 "relative_humidity_percentage": hourly.Variables(1).ValuesAsNumpy(),
-                "precipitation_mm": hourly.Variables(2).ValuesAsNumpy(),   
-                "windspeed_ms": hourly.Variables(3).ValuesAsNumpy(),     
+                "precipitation_mm": hourly.Variables(2).ValuesAsNumpy(),
+                "windspeed_ms": hourly.Variables(3).ValuesAsNumpy(),  # ✅ canonical name
             })
 
+            # keep only current & future hours
             df = df[df["date"] >= now_hour].copy()
 
+            # attach ids/coords/batch
             df["crag_id"] = crag_id
             df["latitude"] = float(lat)
             df["longitude"] = float(lon)
             df["load_batch_id"] = load_batch_id
 
+            # sanitize ranges / types
             df["relative_humidity_percentage"] = (
                 pd.to_numeric(df["relative_humidity_percentage"], errors="coerce").clip(0, 100)
             )
@@ -74,7 +81,7 @@ def fetch_weather_for_crags_staging(
 
             frames.append(df[[
                 "date","precipitation_mm","temperature_c","relative_humidity_percentage",
-                "wind_speed_ms","crag_id","longitude","latitude","load_batch_id"
+                "windspeed_ms","crag_id","longitude","latitude","load_batch_id"  # ✅ no typo
             ]])
 
         except Exception as e:
