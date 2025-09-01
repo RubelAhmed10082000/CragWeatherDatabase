@@ -113,8 +113,6 @@ def ensure_schema():
         # Executes functions found later in the script
         _ensure_primitives(conn)
         _ensure_tables(conn)
-        if os.getenv("SKIP_VIEWS", "0") != "1":
-            _ensure_views(conn)
         _ensure_indexes(conn)
         _record_version(conn, SCHEMA_VERSION_ID)
 
@@ -276,8 +274,7 @@ def _ensure_indexes(conn):
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_date_idx ON public.fact_crag_hourly_weather (date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_crag_date_idx ON public.fact_crag_hourly_weather (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (load_batch_id);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (staged_at);")
-    run_sql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uq_stg_crag_date_batch ON public.stg_weather_route (crag_id, date, load_batch_id);")
+    run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_staged_at_idx ON public.stg_weather_route (staged_at);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_crag_date_idx ON public.stg_weather_route (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_batch_idx ON public.fact_crag_hourly_weather (load_batch_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_loadts_idx ON public.fact_crag_hourly_weather (load_ts);")
@@ -647,73 +644,72 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
 
         conn.commit()
         return upserted, deleted
+    
+    cur.execute("SELECT now() AT TIME ZONE 'UTC' AS cap")
+    cap_ts = cur.fetchone()['cap']
+    
+    cur.execute("""
+        WITH batch_crags AS (
+          SELECT DISTINCT crag_id
+          FROM public.stg_weather_route
+          WHERE load_batch_id = %(b)s
+        ),
+        newest_in_window AS (
+          SELECT
+            s.crag_id,
+            max(CASE WHEN s.precipitation_mm > 0 THEN s.date END) AS newest_rain_ts
+          FROM public.stg_weather_route s
+          JOIN batch_crags bc USING (crag_id)
+          WHERE s.load_batch_id = %(b)s
+            AND s.date >= %(ws)s::timestamptz 
+            AND s.date < %(we)s::timestamptz
+            AND s.date <= %(cap)s::timestamptz
+          GROUP BY s.crag_id
+        ),
+        severity_lookup AS (
+          SELECT
+            n.crag_id,
+            n.newest_rain_ts,
+            CASE
+              WHEN n.newest_rain_ts IS NULL THEN NULL
+              ELSE (
+                SELECT CASE
+                          WHEN sw.precipitation_mm < 1.0 THEN 'light'
+                          WHEN sw.precipitation_mm < 4.0 THEN 'medium'
+                          ELSE 'heavy'
+                        END
+                FROM public.stg_weather_route sw
+                WHERE sw.crag_id = n.crag_id
+                  AND sw.date = n.newest_rain_ts
+                LIMIT 1
+              )
+            END AS newest_rain_severity
+          FROM newest_in_window n
+        ),
+        merged AS (
+          SELECT
+            bc.crag_id,
+            LEAST(                      
+              COALESCE(sl.newest_rain_ts, prs.last_rained_ts),
+              %(cap)s::timestamptz
+            ) AS last_rained_ts,
+            COALESCE(sl.newest_rain_severity, prs.last_rain_severity) AS last_rain_severity
+          FROM batch_crags bc
+          LEFT JOIN severity_lookup sl ON sl.crag_id = bc.crag_id
+          LEFT JOIN public.crag_last_rain_state prs ON prs.crag_id = bc.crag_id
+        )
+        INSERT INTO public.crag_last_rain_state AS s
+          (crag_id, last_rained_ts, last_rain_severity, updated_at)
+        SELECT crag_id, last_rained_ts, last_rain_severity, now()
+        FROM merged
+        ON CONFLICT (crag_id) DO UPDATE
+          SET last_rained_ts = EXCLUDED.last_rained_ts,
+              last_rain_severity = EXCLUDED.last_rain_severity,
+              updated_at = now();
+      """, {"b": load_batch_id, "ws": window_start,
+              "we": window_end, "cap":cap_ts})
 
-        cur.execute("SELECT now() AT TIME ZONE 'UTC' AS cap")
-        cap_ts = cur.fetchone()['cap']
-
-
-        cur.execute("""
-          WITH batch_crags AS (
-            SELECT DISTINCT crag_id
-            FROM public.stg_weather_route
-            WHERE load_batch_id = %(b)s
-          ),
-          newest_in_window AS (
-            SELECT
-              s.crag_id,
-              max(CASE WHEN s.precipitation_mm > 0 THEN s.date END) AS newest_rain_ts
-            FROM public.stg_weather_route s
-            JOIN batch_crags bc USING (crag_id)
-            WHERE s.load_batch_id = %(b)s
-              AND s.date >= %(ws)s::timestamptz 
-              AND s.date < %(we)s::timestamptz
-              AND s.date <= %(cap)s::timestamptz
-            GROUP BY s.crag_id
-          ),
-          severity_lookup AS (
-            SELECT
-              n.crag_id,
-              n.newest_rain_ts,
-              CASE
-                WHEN n.newest_rain_ts IS NULL THEN NULL
-                ELSE (
-                  SELECT CASE
-                           WHEN sw.precipitation_mm < 1.0 THEN 'light'
-                           WHEN sw.precipitation_mm < 4.0 THEN 'medium'
-                           ELSE 'heavy'
-                         END
-                  FROM public.stg_weather_route sw
-                  WHERE sw.crag_id = n.crag_id
-                    AND sw.date = n.newest_rain_ts
-                  LIMIT 1
-                )
-              END AS newest_rain_severity
-            FROM newest_in_window n
-          ),
-          merged AS (
-            SELECT
-              bc.crag_id,
-              LEAST(                      
-                COALESCE(sl.newest_rain_ts, prs.last_rained_ts),
-                %(cap)s::timestamptz
-              ) AS last_rained_ts,
-              COALESCE(sl.newest_rain_severity, prs.last_rain_severity) AS last_rain_severity
-            FROM batch_crags bc
-            LEFT JOIN severity_lookup sl ON sl.crag_id = bc.crag_id
-            LEFT JOIN public.crag_last_rain_state prs ON prs.crag_id = bc.crag_id
-          )
-          INSERT INTO public.crag_last_rain_state AS s
-            (crag_id, last_rained_ts, last_rain_severity, updated_at)
-          SELECT crag_id, last_rained_ts, last_rain_severity, now()
-          FROM merged
-          ON CONFLICT (crag_id) DO UPDATE
-            SET last_rained_ts = EXCLUDED.last_rained_ts,
-                last_rain_severity = EXCLUDED.last_rain_severity,
-                updated_at = now();
-        """, {"b": load_batch_id, "ws": window_start,
-               "we": window_end, "cap":cap_ts})
-
-        return inserted, deleted
+    return inserted, deleted
 
 
 def log_run_start(batch_id:str, dp: int) -> str:
