@@ -8,6 +8,7 @@ from datetime import timezone, datetime
 
 SKIP_VIEWS   = os.getenv("SKIP_VIEWS", "0") == "1" 
 
+DISABLE_WRITES = os.getenv("DISABLE_WRITES", "1") == "1"
 
 VIEWS_STRICT = os.getenv("VIEWS_STRICT", "0") == "1"
 
@@ -419,6 +420,9 @@ def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch
     Staging columns: date, precipitation_mm, temperature_c, relative_humidity_percentage,
                      windspeed_ms, crag_id, longitude, latitude, load_batch_id
     """
+    if DISABLE_WRITES:
+        return 0
+    
     rows = list(rows)
     if not rows:
         return 0
@@ -542,6 +546,9 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
 
     KEY_DELETE_FIRST = os.getenv("KEY_DELETE_FIRST", "0") == "1"
 
+    if DISABLE_WRITES:
+        return 0, 0
+
     # Build the CTE that defines which keys to touch
     if PARTIAL_WINDOW_POLICY == "skip":
         effective_keys_cte = """
@@ -592,25 +599,22 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
             if partial:
                 raise Exception(f"Partial window detected for {partial} crag(s) in batch {load_batch_id}")
 
-        # 1) Delete ONLY keys we staged (EXISTS join to CTE)
-        delete_sql = f"""
-        {effective_keys_cte}
-        DELETE FROM public.fact_crag_hourly_weather f
-        WHERE EXISTS (
-          SELECT 1 FROM effective_keys ek
-          WHERE ek.crag_id = f.crag_id AND ek.date = f.date
-        )
-        """
-        cur.execute(delete_sql, params)
+        # 1) Optional key-scoped delete (OFF by default to save RUs)
         if KEY_DELETE_FIRST:
-          cur.execute("""DELETE ... WHERE EXISTS (SELECT 1 FROM public.stg_weather_route s
-                 WHERE s.load_batch_id = %(b)s AND s.crag_id = f.crag_id AND s.date = f.date)""", params)
-          deleted = cur.rowcount or 0
+            delete_sql = f"""
+            {effective_keys_cte}
+            DELETE FROM public.fact_crag_hourly_weather AS f
+            WHERE EXISTS (
+              SELECT 1 FROM effective_keys ek
+              WHERE ek.crag_id = f.crag_id AND ek.date = f.date
+            )
+            """
+            cur.execute(delete_sql, params)
+            deleted = cur.rowcount or 0
         else:
             deleted = 0
 
-        # 2) Upsert those keys from staging; compute run_ts + horizon_hours here
-        #    (Use interval division for Cockroach compatibility)
+        # 2) Upsert keys from staging; compute run_ts + horizon_hours
         insert_sql = f"""
         {effective_keys_cte}
         INSERT INTO public.fact_crag_hourly_weather (
@@ -627,99 +631,30 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
             s.load_batch_id,
             %(run_ts)s AS forecast_run_ts,
             CAST(EXTRACT(EPOCH FROM (s.date - %(run_ts)s)) / 3600 AS INT) AS horizon_hours
-        FROM public.stg_weather_route s
-        JOIN effective_keys ek
+        FROM public.stg_weather_route AS s
+        JOIN effective_keys AS ek
           ON ek.crag_id = s.crag_id AND ek.date = s.date
         WHERE s.load_batch_id = %(b)s
         ON CONFLICT (crag_id, date) DO UPDATE
-          SET temperature_c                = EXCLUDED.temperature_c,
-              relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
-              precipitation_mm             = EXCLUDED.precipitation_mm,
-              windspeed_ms                 = EXCLUDED.windspeed_ms,
-              load_batch_id                = EXCLUDED.load_batch_id,
-              forecast_run_ts              = EXCLUDED.forecast_run_ts,
-              horizon_hours                = EXCLUDED.horizon_hours
-          WHERE (fact_crag_hourly_weather.temperature_c IS DISTINCT FROM EXCLUDED.temperature_c
-          OR fact_crag_hourly_weather.relative_humidity_percentage IS DISTINCT FROM EXCLUDED.relative_humidity_percentage
-          OR fact_crag_hourly_weather.precipitation_mm IS DISTINCT FROM EXCLUDED.precipitation_mm
-          OR fact_crag_hourly_weather.windspeed_ms IS DISTINCT FROM EXCLUDED.windspeed_ms
-          OR fact_crag_hourly_weather.forecast_run_ts IS DISTINCT FROM EXCLUDED.forecast_run_ts
-          OR fact_crag_hourly_weather.horizon_hours IS DISTINCT FROM EXCLUDED.horizon_hours);
+          SET temperature_c                 = EXCLUDED.temperature_c,
+              relative_humidity_percentage  = EXCLUDED.relative_humidity_percentage,
+              precipitation_mm              = EXCLUDED.precipitation_mm,
+              windspeed_ms                  = EXCLUDED.windspeed_ms,
+              forecast_run_ts               = EXCLUDED.forecast_run_ts,
+              horizon_hours                 = EXCLUDED.horizon_hours,
+              load_batch_id                 = EXCLUDED.load_batch_id
+        WHERE (
+               fact_crag_hourly_weather.temperature_c                IS DISTINCT FROM EXCLUDED.temperature_c
+            OR fact_crag_hourly_weather.relative_humidity_percentage IS DISTINCT FROM EXCLUDED.relative_humidity_percentage
+            OR fact_crag_hourly_weather.precipitation_mm             IS DISTINCT FROM EXCLUDED.precipitation_mm
+            OR fact_crag_hourly_weather.windspeed_ms                 IS DISTINCT FROM EXCLUDED.windspeed_ms
+        );
         """
         cur.execute(insert_sql, params)
         upserted = cur.rowcount or 0
 
-        # (optional) Immediately clear this batch's staging, transactionally
-        # purge_staging(conn, load_batch_id)
-
         conn.commit()
         return upserted, deleted
-    
-    cur.execute("SELECT now() AT TIME ZONE 'UTC' AS cap")
-    cap_ts = cur.fetchone()['cap']
-    
-    cur.execute("""
-        WITH batch_crags AS (
-          SELECT DISTINCT crag_id
-          FROM public.stg_weather_route
-          WHERE load_batch_id = %(b)s
-        ),
-        newest_in_window AS (
-          SELECT
-            s.crag_id,
-            max(CASE WHEN s.precipitation_mm > 0 THEN s.date END) AS newest_rain_ts
-          FROM public.stg_weather_route s
-          JOIN batch_crags bc USING (crag_id)
-          WHERE s.load_batch_id = %(b)s
-            AND s.date >= %(ws)s::timestamptz 
-            AND s.date < %(we)s::timestamptz
-            AND s.date <= %(cap)s::timestamptz
-          GROUP BY s.crag_id
-        ),
-        severity_lookup AS (
-          SELECT
-            n.crag_id,
-            n.newest_rain_ts,
-            CASE
-              WHEN n.newest_rain_ts IS NULL THEN NULL
-              ELSE (
-                SELECT CASE
-                          WHEN sw.precipitation_mm < 1.0 THEN 'light'
-                          WHEN sw.precipitation_mm < 4.0 THEN 'medium'
-                          ELSE 'heavy'
-                        END
-                FROM public.stg_weather_route sw
-                WHERE sw.crag_id = n.crag_id
-                  AND sw.date = n.newest_rain_ts
-                LIMIT 1
-              )
-            END AS newest_rain_severity
-          FROM newest_in_window n
-        ),
-        merged AS (
-          SELECT
-            bc.crag_id,
-            LEAST(                      
-              COALESCE(sl.newest_rain_ts, prs.last_rained_ts),
-              %(cap)s::timestamptz
-            ) AS last_rained_ts,
-            COALESCE(sl.newest_rain_severity, prs.last_rain_severity) AS last_rain_severity
-          FROM batch_crags bc
-          LEFT JOIN severity_lookup sl ON sl.crag_id = bc.crag_id
-          LEFT JOIN public.crag_last_rain_state prs ON prs.crag_id = bc.crag_id
-        )
-        INSERT INTO public.crag_last_rain_state AS s
-          (crag_id, last_rained_ts, last_rain_severity, updated_at)
-        SELECT crag_id, last_rained_ts, last_rain_severity, now()
-        FROM merged
-        ON CONFLICT (crag_id) DO UPDATE
-          SET last_rained_ts = EXCLUDED.last_rained_ts,
-              last_rain_severity = EXCLUDED.last_rain_severity,
-              updated_at = now();
-      """, {"b": load_batch_id, "ws": window_start,
-              "we": window_end, "cap":cap_ts})
-
-    return inserted, deleted
 
 
 def log_run_start(batch_id:str, dp: int) -> str:
