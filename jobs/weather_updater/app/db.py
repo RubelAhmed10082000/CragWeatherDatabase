@@ -110,19 +110,19 @@ def ensure_schema():
     """
     # Crating connetion to DB
     with get_connection() as conn:
-        # Executes functions found later in the script
-        _ensure_primitives(conn)
-        _ensure_tables(conn)
-        _ensure_indexes(conn)
-        _record_version(conn, SCHEMA_VERSION_ID)
-
-    if not SKIP_VIEWS:
-        try:
-            with get_connection() as conn2, conn2.cursor() as cur2:
-                _ensure_views(cur2)
-                conn2.commit()
-        except Exception as e:
-             print(f"WARN: skipping views (non-blocking): {e}")
+          _ensure_primitives(conn)
+          _ensure_tables(conn)
+          _ensure_indexes(conn)
+          _record_version(conn, SCHEMA_VERSION_ID)
+          conn.commit()
+          
+          if os.getenv("SKIP_VIEWS", "1") != "1":
+              try:
+                with get_connection() as vconn:
+                  _ensure_views(vconn)   
+                  vconn.commit()
+              except Exception as e:
+                print(f"WARN: skipping views (non-blocking): {e}")
 
 
 def _sql_in_list(values: list[str]) -> str:
@@ -270,7 +270,6 @@ def _ensure_indexes(conn):
     """ 
     Ensures indexes exists, if not it creates tem
     """
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS dimroutes_crag_idx ON public.dimroutes (crag_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_date_idx ON public.fact_crag_hourly_weather (date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_crag_date_idx ON public.fact_crag_hourly_weather (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (load_batch_id);")
@@ -278,6 +277,10 @@ def _ensure_indexes(conn):
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_crag_date_idx ON public.stg_weather_route (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_batch_idx ON public.fact_crag_hourly_weather (load_batch_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_loadts_idx ON public.fact_crag_hourly_weather (load_ts);")
+
+    if not SKIP_VIEWS:
+      run_sql(conn, "CREATE INDEX IF NOT EXISTS dimroutes_crag_idx ON public.dimroutes (crag_id);")
+
 
 def _record_version(conn, version_id:str):
     run_sql(conn, """
@@ -325,7 +328,7 @@ def _ensure_views(conn):
       r.route_name,
       r.grade,
       r.safety_grade,
-      r.crag_id,
+      crag_id,
       c.crag_name,
       c.county,
       c.latitude,
@@ -342,7 +345,7 @@ def _ensure_views(conn):
     run_sql(conn, """
     CREATE OR REPLACE VIEW public.v_crag_hourly_weather AS
     SELECT 
-      f.crag_id,
+      crag_id,
       c.crag_name,
       c.county,
       c.latitude,
@@ -360,13 +363,15 @@ def _ensure_views(conn):
       f.horizon_hours,
       s.last_rained_ts,
       s.last_rain_severity,
-      CASE 
-            WHEN s.last_rained_ts IS NULL THEN NULL
-            ELSE GREATEST(0, EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - s.last_rained_ts))/3600.0)::int
-            END AS hours_since_rain
+       CASE 
+        WHEN s.last_rained_ts IS NULL THEN NULL
+        ELSE GREATEST(
+           0,
+           CAST(EXTRACT(EPOCH FROM (now() - s.last_rained_ts)) / 3600 AS INT)
+         )
     FROM public.fact_crag_hourly_weather f
     JOIN public.dimcrags c USING (crag_id)
-    LEFT JOIN public.crag_last_rain_state USING (crag_id);
+    LEFT JOIN public.crag_last_rain_state AS s USING (crag_id);
 """)
     
 
@@ -622,7 +627,7 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
             s.windspeed_ms,
             s.load_batch_id,
             %(run_ts)s AS forecast_run_ts,
-            ((s.date - %(run_ts)s) / INTERVAL '1 hour')::int AS horizon_hours
+            CAST(EXTRACT(EPOCH FROM (s.date - %(run_ts)s)) / 3600 AS INT) AS horizon_hours
         FROM public.stg_weather_route s
         JOIN effective_keys ek
           ON ek.crag_id = s.crag_id AND ek.date = s.date
