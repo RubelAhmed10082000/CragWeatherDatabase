@@ -3,11 +3,14 @@ import os
 from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
-from typing import Iterable, Mapping, Any
-from datetime import timedelta
+from typing import Iterable, Mapping, Any, Tuple
+from datetime import timedelta, timezone, datetime
 
-STAGING_RETRY_MODE = os.getenv("STAGING_RETRY_MODE", "new_batch")  
+STAGING_RETRY_MODE = os.getenv("STAGING_RETRY_MODE", "new_batch") 
+
 REQUIRE_FULL_WINDOW = os.getenv("REQUIRE_FULL_WINDOW", "0") == "1"
+
+PARTIAL_WINDOW_POLICY = os.getenv("PARTIAL_WINDOW_POLICY", "allow")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -392,7 +395,6 @@ def fetch_coords_for_crags(crag_ids: Iterable[str]) -> dict[str,tuple[float, flo
         rows = cur.fetchall()
         return {r["crag_id"]:(float(r["latitude"]), float(r["longitude"])) for r in rows}
     
-STAGING_RETRY_MODE = os.getenv("STAGING_RETRY_MODE", "new_batch")  # new_batch | purge | update
 
 def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch_size: int = 5000) -> int:
     """
@@ -521,103 +523,116 @@ def delete_old_staging(days: int = 7, conn=None, exclude_batch: str | None = Non
     
 
 
-def upsert_fact_window(load_batch_id: str, hours: int = 12) -> tuple[int, int]:
+def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
     """
-    Upserts fact table with hourly weather data
-    Sliding window basis
+    Safe upsert from staging into fact table for a given batch + window.
+    - Deletes ONLY (crag_id, date) keys present in this batch's staging.
+    - Enforces partial-window policy via PARTIAL_WINDOW_POLICY.
+    Returns: (inserted_or_updated, deleted_keys)
     """
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SET application_name = 'cragcast_upsert_window'")
-        cur.execute("SELECT date_trunc('hour', now() AT TIME ZONE 'UTC') AS w_start")
-        window_start = cur.fetchone()["w_start"]
-        cur.execute("SELECT %(ws)s + (%(h)s || ' hours')::interval AS w_end",
-                    {"ws": window_start, "h": hours})
-        window_end = cur.fetchone()["w_end"]
+    run_ts = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
-        cur.execute("""
-          DELETE FROM public.fact_crag_hourly_weather f
-          WHERE f.date >= %(ws)s::timestamptz
-            AND f.date <  %(we)s::timestamptz
-            AND EXISTS (
-              SELECT 1
-              FROM public.stg_weather_route s
-              WHERE s.load_batch_id = %(b)s
-                AND s.crag_id = f.crag_id
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM public.stg_weather_route s
-              WHERE s.load_batch_id = %(b)s
-                AND s.crag_id = f.crag_id
-                AND s.date = f.date
-            );
-        """, {"b": load_batch_id, "ws": window_start, "we": window_end})
+    # Build the CTE that defines which keys to touch
+    if PARTIAL_WINDOW_POLICY == "skip":
+        effective_keys_cte = """
+        WITH stage_keys AS (
+          SELECT DISTINCT crag_id, date
+          FROM public.stg_weather_route
+          WHERE load_batch_id = %(b)s
+        ),
+        cov AS (
+          SELECT crag_id, count(*)::int AS n
+          FROM stage_keys
+          GROUP BY crag_id
+        ),
+        effective_keys AS (
+          SELECT k.crag_id, k.date
+          FROM stage_keys k
+          JOIN cov c USING (crag_id)
+          WHERE c.n = %(h)s
+        )
+        """
+        params = {"b": load_batch_id, "h": hours, "run_ts": run_ts}
+    else:
+        effective_keys_cte = """
+        WITH effective_keys AS (
+          SELECT DISTINCT crag_id, date
+          FROM public.stg_weather_route
+          WHERE load_batch_id = %(b)s
+        )
+        """
+        params = {"b": load_batch_id, "run_ts": run_ts}
+
+    with get_connection() as conn, conn.cursor() as cur:
+        if PARTIAL_WINDOW_POLICY == "fail":
+            cur.execute("""
+                WITH stage_keys AS (
+                  SELECT DISTINCT crag_id, date
+                  FROM public.stg_weather_route
+                  WHERE load_batch_id = %(b)s
+                ),
+                cov AS (
+                  SELECT crag_id, count(*)::int AS n
+                  FROM stage_keys
+                  GROUP BY crag_id
+                )
+                SELECT count(*) FROM cov WHERE n <> %(h)s
+            """, {"b": load_batch_id, "h": hours})
+            partial = cur.fetchone()[0]
+            if partial:
+                raise Exception(f"Partial window detected for {partial} crag(s) in batch {load_batch_id}")
+
+        # 1) Delete ONLY keys we staged (EXISTS join to CTE)
+        delete_sql = f"""
+        {effective_keys_cte}
+        DELETE FROM public.fact_crag_hourly_weather f
+        WHERE EXISTS (
+          SELECT 1 FROM effective_keys ek
+          WHERE ek.crag_id = f.crag_id AND ek.date = f.date
+        )
+        """
+        cur.execute(delete_sql, params)
         deleted = cur.rowcount or 0
 
-
-        cur.execute("""
-          WITH batch_crags AS (
-            SELECT DISTINCT crag_id
-            FROM public.stg_weather_route
-            WHERE load_batch_id = %(b)s
-          ),
-                    
-          src AS (
-            SELECT
-              crag_id,
-              date,
-              temperature_c,
-              relative_humidity_percentage,
-              precipitation_mm,
-              windspeed_ms,
-              now() AS load_ts,          
-              load_batch_id,
-              %(ws)s::timestamptz AS forecast_run_ts,
-              (EXTRACT(EPOCH FROM (s.date - %(ws)s::timestamptz)) / 3600.0)::int AS horizon_hours
-            FROM public.stg_weather_route s
-            JOIN batch_crags bc USING (crag_id)
-            WHERE s.load_batch_id = %(b)s
-              AND s.date >= %(ws)s::timestamptz
-              AND s.date <  %(we)s::timestamptz
-          )
-          
-          INSERT INTO public.fact_crag_hourly_weather (
+        # 2) Upsert those keys from staging; compute run_ts + horizon_hours here
+        #    (Use interval division for Cockroach compatibility)
+        insert_sql = f"""
+        {effective_keys_cte}
+        INSERT INTO public.fact_crag_hourly_weather (
             crag_id, date, temperature_c, relative_humidity_percentage,
-            precipitation_mm, windspeed_ms, load_ts, load_batch_id,
-            forecast_run_ts, horizon_hours
-            )
-                    
-          SELECT
-            crag_id,
-            date,
-            temperature_c,
-            relative_humidity_percentage,
-            precipitation_mm,
-            windspeed_ms,
-            load_ts,
-            load_batch_id,
-            forecast_run_ts,
-            horizon_hours
-          FROM src
-          ON CONFLICT (crag_id, date) DO UPDATE
-          SET
-          temperature_c = EXCLUDED.temperature_c,
-          relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
-          precipitation_mm = EXCLUDED.precipitation_mm,
-          windspeed_ms = EXCLUDED.windspeed_ms,
-          load_batch_id = EXCLUDED.load_batch_id,
-          forecast_run_ts = EXCLUDED.forecast_run_ts,
-          horizon_hours = EXCLUDED.horizon_hours,
-          last_updated_ts = now()
-          WHERE
-          fact_crag_hourly_weather.temperature_c IS DISTINCT FROM EXCLUDED.temperature_c
-          OR fact_crag_hourly_weather.relative_humidity_percentage IS DISTINCT FROM EXCLUDED.relative_humidity_percentage
-          OR fact_crag_hourly_weather.precipitation_mm IS DISTINCT FROM EXCLUDED.precipitation_mm
-          OR fact_crag_hourly_weather.windspeed_ms IS DISTINCT FROM EXCLUDED.windspeed_ms
-          OR fact_crag_hourly_weather.forecast_run_ts IS DISTINCT FROM EXCLUDED.forecast_run_ts
-          OR fact_crag_hourly_weather.horizon_hours IS DISTINCT FROM EXCLUDED.horizon_hours;
-        """, {"b": load_batch_id, "ws": window_start, "we": window_end})
-        inserted = cur.rowcount or 0
+            precipitation_mm, windspeed_ms, load_batch_id, forecast_run_ts, horizon_hours
+        )
+        SELECT
+            s.crag_id,
+            s.date,
+            s.temperature_c,
+            s.relative_humidity_percentage,
+            s.precipitation_mm,
+            s.windspeed_ms,
+            s.load_batch_id,
+            %(run_ts)s AS forecast_run_ts,
+            ((s.date - %(run_ts)s) / INTERVAL '1 hour')::int AS horizon_hours
+        FROM public.stg_weather_route s
+        JOIN effective_keys ek
+          ON ek.crag_id = s.crag_id AND ek.date = s.date
+        WHERE s.load_batch_id = %(b)s
+        ON CONFLICT (crag_id, date) DO UPDATE
+          SET temperature_c                = EXCLUDED.temperature_c,
+              relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
+              precipitation_mm             = EXCLUDED.precipitation_mm,
+              windspeed_ms                 = EXCLUDED.windspeed_ms,
+              load_batch_id                = EXCLUDED.load_batch_id,
+              forecast_run_ts              = EXCLUDED.forecast_run_ts,
+              horizon_hours                = EXCLUDED.horizon_hours
+        """
+        cur.execute(insert_sql, params)
+        upserted = cur.rowcount or 0
+
+        # (optional) Immediately clear this batch's staging, transactionally
+        # purge_staging(conn, load_batch_id)
+
+        conn.commit()
+        return upserted, deleted
 
         cur.execute("SELECT now() AT TIME ZONE 'UTC' AS cap")
         cap_ts = cur.fetchone()['cap']
