@@ -1,6 +1,7 @@
 import os 
 from datetime import datetime, timezone
 import time
+import itertools, os
 
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (
@@ -29,6 +30,8 @@ SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", 
 CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
 MAX_POINTS     = int(os.getenv("MAX_POINTS_PER_SHARD", "0")) 
 WINDOW_HOURS   = int(os.getenv("WINDOW_HOURS", "12")) 
+MAX_ROWS_PER_RUN = int(os.getenv("MAX_ROWS_PER_RUN", "0") or 0) 
+
                      
 # Creating chunks 
 def chunk(lst, n):
@@ -104,10 +107,22 @@ def main():
             max_cells=max_cells,
         )
 
+        original_count = len(df_all)
+        cap_hit = False
+        if MAX_ROWS_PER_RUN > 0 and original_count > MAX_ROWS_PER_RUN:
+            df_all = df_all.head(MAX_ROWS_PER_RUN).copy()
+            cap_hit = True
+
         if df_all.empty:
             print(f"No rows fetched (cells={cells_hit}, crags_covered={crags_covered}).")
             log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="no_data")
             return
+        
+        original_count = len(df_all)
+        cap_hit = False
+        if MAX_ROWS_PER_RUN > 0 and original_count > MAX_ROWS_PER_RUN:
+            df_all = df_all.head(MAX_ROWS_PER_RUN).copy()
+            cap_hit = True
 
         staged = load_to_staging(df_all.to_dict(orient="records"), load_batch_id=batch_id)
         
@@ -134,7 +149,9 @@ def main():
             "upserted": upserted,
             "deleted_in_window": deleted,
             "deleted_staging": deleted_staging,
-            "pruned_staging_older_days": pruned
+            "pruned_staging_older_days": pruned,
+            "hard_cap_rows": MAX_ROWS_PER_RUN,
+            "hard_cap_hit": cap_hit
         })
 
     except Exception as e:

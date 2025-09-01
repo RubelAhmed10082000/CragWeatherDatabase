@@ -369,6 +369,7 @@ def _ensure_views(conn):
            0,
            CAST(EXTRACT(EPOCH FROM (now() - s.last_rained_ts)) / 3600 AS INT)
          )
+        END AS hours_since_rain
     FROM public.fact_crag_hourly_weather f
     JOIN public.dimcrags c USING (crag_id)
     LEFT JOIN public.crag_last_rain_state AS s USING (crag_id);
@@ -507,35 +508,26 @@ def purge_staging_standalone(load_batch_id: str) -> int:
 
 def delete_old_staging(days: int = 7, conn=None, exclude_batch: str | None = None) -> int:
     """
-    Delete old rows from staging by age of *staging event*, not forecast date.
+    Delete old rows from staging by age of staging event (staged_at).
     If `conn` is provided, run inside caller's transaction; otherwise open a one-off connection.
     """
-    owns_conn = False
     if conn is None:
-        conn = get_connection()
-        owns_conn = True
+        with get_connection() as conn2:
+            return delete_old_staging(days=days, conn=conn2, exclude_batch=exclude_batch)
 
-    try:
-        params = {"cutoff_days": days}
-        exclude_sql = ""
-        if exclude_batch:
-            exclude_sql = "AND load_batch_id <> %(exclude)s"
-            params["exclude"] = exclude_batch
+    params = {"cutoff_days": days}
+    exclude_sql = ""
+    if exclude_batch:
+        exclude_sql = "AND load_batch_id <> %(exclude)s"
+        params["exclude"] = exclude_batch
 
-        with conn.cursor() as cur:
-            cur.execute(f"""
-                DELETE FROM public.stg_weather_route
-                WHERE staged_at < now() - (%(cutoff_days)s || ' days')::interval
-                {exclude_sql}
-            """, params)
-            deleted = cur.rowcount or 0
-
-        if owns_conn:
-            conn.commit()
-        return deleted
-    finally:
-        if owns_conn:
-            conn.close()
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            DELETE FROM public.stg_weather_route
+            WHERE staged_at < now() - (%(cutoff_days)s || ' days')::interval
+            {exclude_sql}
+        """, params)
+        return cur.rowcount or 0
     
 
 
@@ -547,6 +539,8 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
     Returns: (inserted_or_updated, deleted_keys)
     """
     run_ts = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+    KEY_DELETE_FIRST = os.getenv("KEY_DELETE_FIRST", "0") == "1"
 
     # Build the CTE that defines which keys to touch
     if PARTIAL_WINDOW_POLICY == "skip":
@@ -608,7 +602,12 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
         )
         """
         cur.execute(delete_sql, params)
-        deleted = cur.rowcount or 0
+        if KEY_DELETE_FIRST:
+          cur.execute("""DELETE ... WHERE EXISTS (SELECT 1 FROM public.stg_weather_route s
+                 WHERE s.load_batch_id = %(b)s AND s.crag_id = f.crag_id AND s.date = f.date)""", params)
+          deleted = cur.rowcount or 0
+        else:
+            deleted = 0
 
         # 2) Upsert those keys from staging; compute run_ts + horizon_hours here
         #    (Use interval division for Cockroach compatibility)
@@ -640,6 +639,12 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
               load_batch_id                = EXCLUDED.load_batch_id,
               forecast_run_ts              = EXCLUDED.forecast_run_ts,
               horizon_hours                = EXCLUDED.horizon_hours
+          WHERE (fact_crag_hourly_weather.temperature_c IS DISTINCT FROM EXCLUDED.temperature_c
+          OR fact_crag_hourly_weather.relative_humidity_percentage IS DISTINCT FROM EXCLUDED.relative_humidity_percentage
+          OR fact_crag_hourly_weather.precipitation_mm IS DISTINCT FROM EXCLUDED.precipitation_mm
+          OR fact_crag_hourly_weather.windspeed_ms IS DISTINCT FROM EXCLUDED.windspeed_ms
+          OR fact_crag_hourly_weather.forecast_run_ts IS DISTINCT FROM EXCLUDED.forecast_run_ts
+          OR fact_crag_hourly_weather.horizon_hours IS DISTINCT FROM EXCLUDED.horizon_hours);
         """
         cur.execute(insert_sql, params)
         upserted = cur.rowcount or 0
