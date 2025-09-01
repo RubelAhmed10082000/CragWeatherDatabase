@@ -6,6 +6,9 @@ from psycopg.rows import dict_row
 from typing import Iterable, Mapping, Any
 from datetime import timedelta
 
+STAGING_RETRY_MODE = os.getenv("STAGING_RETRY_MODE", "new_batch")  
+REQUIRE_FULL_WINDOW = os.getenv("REQUIRE_FULL_WINDOW", "0") == "1"
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 ROCK_TYPES = ['Gritstone',
@@ -102,7 +105,8 @@ def ensure_schema():
         # Executes functions found later in the script
         _ensure_primitives(conn)
         _ensure_tables(conn)
-        _ensure_views(conn) 
+        if os.getenv("SKIP_VIEWS", "0") != "1":
+            _ensure_views(conn)
         _ensure_indexes(conn)
         _record_version(conn, SCHEMA_VERSION_ID)
 
@@ -141,7 +145,7 @@ def _ensure_tables(conn):
     # dimcrags 
     run_sql(conn, f"""
     CREATE TABLE IF NOT EXISTS public.dimcrags (
-          crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             crag_name TEXT NOT NULL,
             county TEXT,
             latitude DOUBLE PRECISION,
@@ -167,26 +171,35 @@ def _ensure_tables(conn):
     );
 """)
     
+    disable_fk = os.getenv("DISABLE_FACT_FK", "1") == "1"
+    fk_clause = "" if disable_fk else \
+    ", CONSTRAINT fact_crag_hourly_weather_crag_fk " \
+    "FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id)"
+
     # Fact table at crag x hour grain
-    run_sql(conn, """
+    run_sql(conn, f"""
     CREATE TABLE IF NOT EXISTS public.fact_crag_hourly_weather (
-            crag_id UUID NOT NULL,
-            date TIMESTAMPTZ NOT NULL,
-            temperature_c REAL,
-            relative_humidity_percentage REAL,
-            precipitation_mm NUMERIC(6,2),
-            windspeed_ms REAL,
-            load_ts TIMESTAMPTZ DEFAULT now(),
-            last_updated_ts TIMESTAMPTZ DEFAULT now(),
-            load_batch_id TEXT NOT NULL,
-            forecast_run_ts TIMESTAMPTZ,
-            horizon_hours INT,
-            CONSTRAINT fact_crag_hourly_weather_pk PRIMARY KEY (crag_id, date),
-            CONSTRAINT fact_crag_hourly_weather_crag_fk FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id),
-            CONSTRAINT rh_0_100_chk CHECK (relative_humidity_percentage IS NULL OR (relative_humidity_percentage BETWEEN 0 AND 100)),
-            CONSTRAINT precip_0_100_chk CHECK (precipitation_mm IS NULL OR precipitation_mm >= 0),
-            CONSTRAINT wind_nonneg_chk CHECK (windspeed_ms IS NULL OR windspeed_ms >= 0)
+        crag_id UUID NOT NULL,
+        date TIMESTAMPTZ NOT NULL,
+        temperature_c REAL,
+        relative_humidity_percentage REAL,
+        precipitation_mm NUMERIC(6,2),
+        windspeed_ms REAL,
+        load_ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_updated_ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+        load_batch_id TEXT NOT NULL,
+        forecast_run_ts TIMESTAMPTZ,
+        horizon_hours INT,
+        CONSTRAINT fact_crag_hourly_weather_pk PRIMARY KEY (crag_id, date)
+        {fk_clause}
       );
+      """)
+    
+    if not disable_fk:
+      run_sql(conn,"""
+        ALTER TABLE public.fact_crag_hourly_weather
+        ADD CONSTRAINT IF NOT EXISTS fact_crag_hourly_weather_crag_fk
+        FOREIGN KEY (crag_id) REFERENCES public.dimcrags (crag_id)
       """)
     
     # Staging for weather data
@@ -198,9 +211,10 @@ def _ensure_tables(conn):
             relative_humidity_percentage REAL,
             windspeed_ms REAL,
             crag_id UUID NOT NULL,
-            longitude DOUBLE PRECISION,
-            latitude DOUBLE PRECISION,
+            longitude DOUBLE PRECISION NOT NULL,
+            latitude DOUBLE PRECISION NOT NULL,
             load_batch_id TEXT NOT NULL,
+            staged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT stg_weather_unique_per_batch UNIQUE (crag_id, date, load_batch_id)
             );
             """)
@@ -245,6 +259,8 @@ def _ensure_indexes(conn):
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_date_idx ON public.fact_crag_hourly_weather (date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_crag_date_idx ON public.fact_crag_hourly_weather (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (load_batch_id);")
+    run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (staged_at);")
+    run_sql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uq_stg_crag_date_batch ON public.stg_weather_route (crag_id, date, load_batch_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_crag_date_idx ON public.stg_weather_route (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_batch_idx ON public.fact_crag_hourly_weather (load_batch_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_loadts_idx ON public.fact_crag_hourly_weather (load_ts);")
@@ -260,7 +276,6 @@ def _ensure_views(conn):
     """
     Ensure views exists otherwise creates them
     """
-
   # View for RU obersvability daily usage
     run_sql(conn, """
       CREATE OR REPLACE VIEW public.v_ru_usage_daily AS
@@ -303,7 +318,7 @@ def _ensure_views(conn):
       c.longitude,
       c.rocktype,
       c.climbing_style
-    FROM public.dimroutes r 
+    FROM public.dimroutes AS r 
     JOIN public.dimcrags c ON c.crag_id = r.crag_id;
     """)
 
@@ -377,39 +392,71 @@ def fetch_coords_for_crags(crag_ids: Iterable[str]) -> dict[str,tuple[float, flo
         rows = cur.fetchall()
         return {r["crag_id"]:(float(r["latitude"]), float(r["longitude"])) for r in rows}
     
-def load_to_staging(rows: Iterable[Mapping[str,Any]], load_batch_id: str, batch_size: int = 5000) -> int:
-    """
-    Batch insert into stg_weather_route
-    """
+STAGING_RETRY_MODE = os.getenv("STAGING_RETRY_MODE", "new_batch")  # new_batch | purge | update
 
+def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch_size: int = 5000) -> int:
+    """
+    Batch insert into stg_weather_route with optional retry policy.
+    Staging columns: date, precipitation_mm, temperature_c, relative_humidity_percentage,
+                     windspeed_ms, crag_id, longitude, latitude, load_batch_id
+    """
     rows = list(rows)
     if not rows:
         return 0
-    
-    cols = ["date","precipitation_mm","temperature_c","relative_humidity_percentage",
-            "windspeed_ms","crag_id","longitude","latitude","load_batch_id"]
+
+    cols = [
+        "date", "precipitation_mm", "temperature_c", "relative_humidity_percentage",
+        "windspeed_ms", "crag_id", "longitude", "latitude", "load_batch_id"
+    ]
+
+    conflict_clause = (
+        """
+        ON CONFLICT (crag_id, date, load_batch_id) DO UPDATE
+        SET temperature_c = EXCLUDED.temperature_c,
+            relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
+            precipitation_mm = EXCLUDED.precipitation_mm,
+            windspeed_ms = EXCLUDED.windspeed_ms
+        """
+        if STAGING_RETRY_MODE == "update" else
+        "ON CONFLICT (crag_id, date, load_batch_id) DO NOTHING"
+    )
+
     inserted = 0
+    row_placeholders = "(" + ",".join(["%s"] * len(cols)) + ")"
 
     with get_connection() as conn, conn.cursor() as cur:
-        for i in range (0, len(rows), batch_size):
-            chunk = rows[i:i+batch_size]
-            values = [
-              (r["date"], r.get("precipitation_mm"), r.get("temperature_c"), r.get("relative_humidity_percentage"),
-               r.get("windspeed_ms"), r["crag_id"], r["longitude"], r["latitude"], load_batch_id)
-              for r in chunk
-            ]
+        if STAGING_RETRY_MODE == "purge":
+            purge_staging(conn, load_batch_id)  
 
+        for i in range(0, len(rows), batch_size):
+            chunk = rows[i:i + batch_size]
+            vals_flat: list[Any] = []
+            for r in chunk:
+                vals_flat.extend([
+                    r["date"],
+                    r.get("precipitation_mm"),
+                    r.get("temperature_c"),
+                    r.get("relative_humidity_percentage"),
+                    r.get("windspeed_ms"),
+                    r["crag_id"],
+                    r["longitude"],
+                    r["latitude"],
+                    load_batch_id,
+                ])
+            placeholders = ",".join([row_placeholders] * len(chunk))
             cur.execute(
-                f"""
-                INSERT INTO public.stg_weather_route
-                ({", ".join(cols)})
-                VALUES {",".join(["(%s,%s,%s,%s,%s,%s,%s,%s,%s)"]*len(values))}
-                ON CONFLICT (crag_id, date, load_batch_id) DO NOTHING
-                """,
-                [v for row in values for v in row]
+                f"INSERT INTO public.stg_weather_route ({', '.join(cols)}) "
+                f"VALUES {placeholders} {conflict_clause}",
+                vals_flat,
             )
-            inserted += cur.rowcount if cur.rowcount is not None else 0 
+            if cur.rowcount is not None and cur.rowcount >= 0:
+                inserted += cur.rowcount
+
+        conn.commit()
+
     return inserted
+
+    
 
 def delete_staging_batch(load_batch_id:str) -> int:
     """
@@ -423,14 +470,54 @@ def delete_staging_batch(load_batch_id:str) -> int:
         deleted = cur.rowcount or 0
     return deleted 
 
-def delete_old_staging(days: int = 7) -> int:
+def purge_staging(conn, load_batch_id: str) -> int:
     """
-    Deletes staging table after upsert
+    Delete a staging batch inside the caller's transactions.
     """
-
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM public.stg_weather_route WHERE date < now() - (%(d)s || ' days')::interval", {"d":days})
+    with conn.cursor() as cur:
+        cur.execute("""
+              DELETE FROM public.stg_weather_route
+              WHERE load_batch_id = %(b)s
+              """, {"b":load_batch_id})
         return cur.rowcount or 0
+
+def purge_staging_standalone(load_batch_id: str) -> int:
+    with get_connection() as conn:
+        n = purge_staging(conn, load_batch_id)
+        conn.commit()
+        return n
+
+def delete_old_staging(days: int = 7, conn=None, exclude_batch: str | None = None) -> int:
+    """
+    Delete old rows from staging by age of *staging event*, not forecast date.
+    If `conn` is provided, run inside caller's transaction; otherwise open a one-off connection.
+    """
+    owns_conn = False
+    if conn is None:
+        conn = get_connection()
+        owns_conn = True
+
+    try:
+        params = {"cutoff_days": days}
+        exclude_sql = ""
+        if exclude_batch:
+            exclude_sql = "AND load_batch_id <> %(exclude)s"
+            params["exclude"] = exclude_batch
+
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                DELETE FROM public.stg_weather_route
+                WHERE staged_at < now() - (%(cutoff_days)s || ' days')::interval
+                {exclude_sql}
+            """, params)
+            deleted = cur.rowcount or 0
+
+        if owns_conn:
+            conn.commit()
+        return deleted
+    finally:
+        if owns_conn:
+            conn.close()
     
 
 
