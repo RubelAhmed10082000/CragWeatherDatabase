@@ -4,7 +4,12 @@ from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
 from typing import Iterable, Mapping, Any, Tuple
-from datetime import timedelta, timezone, datetime
+from datetime import timezone, datetime
+
+SKIP_VIEWS   = os.getenv("SKIP_VIEWS", "0") == "1" 
+
+
+VIEWS_STRICT = os.getenv("VIEWS_STRICT", "0") == "1"
 
 STAGING_RETRY_MODE = os.getenv("STAGING_RETRY_MODE", "new_batch") 
 
@@ -112,6 +117,15 @@ def ensure_schema():
             _ensure_views(conn)
         _ensure_indexes(conn)
         _record_version(conn, SCHEMA_VERSION_ID)
+
+    if not SKIP_VIEWS:
+        try:
+            with get_connection() as conn2, conn2.cursor() as cur2:
+                _ensure_views(cur2)
+                conn2.commit()
+        except Exception as e:
+             print(f"WARN: skipping views (non-blocking): {e}")
+
 
 def _sql_in_list(values: list[str]) -> str:
     return ", ".join("'" + v.replace("'", "''") + "'" for v in values)
@@ -322,7 +336,7 @@ def _ensure_views(conn):
       c.rocktype,
       c.climbing_style
     FROM public.dimroutes AS r 
-    JOIN public.dimcrags c ON c.crag_id = r.crag_id;
+    JOIN public.dimcrags c USING (crag_id);
     """)
 
   # Weather with crag attributes for API/frontend
@@ -354,8 +368,8 @@ def _ensure_views(conn):
             ELSE GREATEST(0, EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - s.last_rained_ts))/3600.0)::int
             END AS hours_since_rain
     FROM public.fact_crag_hourly_weather f
-    JOIN public.dimcrags c ON c.crag_id = f.crag_id
-    LEFT JOIN public.crag_last_rain_state s ON s.crag_id = f.crag_id;
+    JOIN public.dimcrags c USING (crag_id)
+    LEFT JOIN public.crag_last_rain_state USING (crag_id);
 """)
     
 
