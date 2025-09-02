@@ -8,7 +8,7 @@ from datetime import timezone, datetime
 
 SKIP_VIEWS   = os.getenv("SKIP_VIEWS", "0") == "1" 
 
-DISABLE_WRITES = os.getenv("DISABLE_WRITES", "1") == "1"
+DISABLE_WRITES = os.getenv("DISABLE_WRITES", "0") == "1"
 
 VIEWS_STRICT = os.getenv("VIEWS_STRICT", "0") == "1"
 
@@ -81,6 +81,27 @@ STYLES_ALLOWED      = [v for v in CLIMBING_STYLES if v.strip().upper() not in UN
 
 SCHEMA_VERSION_ID = "2025-08-28_optA_text_checks_v3"
 
+def _resolve_dsn() -> str:
+    for k in ("DATABASE_URL","DB_URL","SQLALCHEMY_DATABASE_URI","COCKROACH_URL"):
+        v = os.getenv(k)
+        if v and v.strip():
+            return v.strip()
+    raise RuntimeError("No DB URL provided")
+
+def _normalize_dsn(s: str) -> str:
+    s = s.strip()
+    # conninfo → pass through; optionally relax verify-full if no cert
+    if s.lower().startswith(("host=","user=","port=","dbname=","sslmode=")):
+        if "sslmode=verify-full" in s and "sslrootcert=" not in s:
+            s = s.replace("sslmode=verify-full", "sslmode=require")
+        return s
+    # URL → ensure sslmode=require and encode options '=' if present
+    if "sslmode=" not in s:
+        s += ("&" if "?" in s else "?") + "sslmode=require"
+    if "options=--cluster=" in s and "%3D" not in s:
+        s = s.replace("options=--cluster=", "options=--cluster%3D")
+    return s
+
 @contextmanager
 def get_connection():
     """
@@ -88,11 +109,8 @@ def get_connection():
     """
 
     # Raises RuntimeError if no DATABSE_URL set
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not set")
-    # Establishes connection via psycopg 
-    with psycopg.connect(DATABASE_URL, autocommit=True, 
-                         row_factory=dict_row) as conn:
+    dsn = _normalize_dsn(_resolve_dsn())
+    with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
         yield conn
 
 def run_sql(conn, sql:str, params:dict | None = None):

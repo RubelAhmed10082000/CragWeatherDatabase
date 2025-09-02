@@ -24,3 +24,4 @@ ENTRYPOINT ["python","-m","jobs.weather_updater.upsert.run_upsert"]
 
 
 
+
