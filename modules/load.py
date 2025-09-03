@@ -4,6 +4,8 @@ import time
 import pandas as pd
 import fsspec
 from psycopg import connect, sql
+from psycopg.rows import dict_row
+
 from modules.gcs_io import read_parquet, gcs_url
 
 DATABASE_URL = os.getenv("DATABASE_URL")

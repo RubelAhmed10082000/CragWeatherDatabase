@@ -1,0 +1,148 @@
+{
+  "apiVersion": "run.googleapis.com/v1",
+  "kind": "Job",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/client-name": "gcloud",
+      "run.googleapis.com/client-version": "534.0.0",
+      "run.googleapis.com/creator": "ra38697@gmail.com",
+      "run.googleapis.com/lastModifier": "ra38697@gmail.com",
+      "run.googleapis.com/operation-id": "e866a84d-2a8a-4d0e-aa4c-67a94078b654"
+    },
+    "creationTimestamp": "2025-09-02T12:10:05.160087Z",
+    "generation": 43,
+    "labels": {
+      "cloud.googleapis.com/location": "europe-west2",
+      "run.googleapis.com/lastUpdatedTime": "2025-09-03T12:54:18.467396Z",
+      "run.googleapis.com/satisfiesPzs": "true"
+    },
+    "name": "cragcast-upsert",
+    "namespace": "898934496030",
+    "resourceVersion": "AAY95RpV7XY",
+    "selfLink": "/apis/run.googleapis.com/v1/namespaces/898934496030/jobs/cragcast-upsert",
+    "uid": "04a456cc-2dc9-4201-ad1c-96b2406766fb"
+  },
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "run.googleapis.com/client-name": "gcloud",
+          "run.googleapis.com/client-version": "534.0.0",
+          "run.googleapis.com/execution-environment": "gen2",
+          "run.googleapis.com/secrets": "COCKR-db64bf4a-88b6-11f0-8572-d4d252cfcfc3:projects/898934496030/secrets/COCKROACH_CA"
+        },
+        "labels": {
+          "client.knative.dev/nonce": "xaw_zoj_liw"
+        }
+      },
+      "spec": {
+        "taskCount": 1,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "args": [
+                  "-m",
+                  "jobs.weather_updater.upsert.run_upsert"
+                ],
+                "command": [
+                  "python"
+                ],
+                "env": [
+                  {
+                    "name": "PYTHONUNBUFFERED",
+                    "value": "1"
+                  },
+                  {
+                    "name": "WINDOW_HOURS",
+                    "value": "6"
+                  },
+                  {
+                    "name": "MAX_ROWS_PER_RUN",
+                    "value": "50000"
+                  },
+                  {
+                    "name": "TOTAL_SHARDS",
+                    "value": "1"
+                  },
+                  {
+                    "name": "SHARD_INDEX",
+                    "value": "0"
+                  },
+                  {
+                    "name": "CHUNK_SIZE",
+                    "value": "200"
+                  },
+                  {
+                    "name": "PARTIAL_WINDOW_POLICY",
+                    "value": "allow"
+                  },
+                  {
+                    "name": "STAGING_RETRY_MODE",
+                    "value": "new_batch"
+                  },
+                  {
+                    "name": "DATABASE_URL",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "key": "latest",
+                        "name": "DATABASE_URL"
+                      }
+                    }
+                  }
+                ],
+                "image": "europe-west2-docker.pkg.dev/winged-woods-468712-j1/run/cragcast-upsert:20250903-133252",
+                "resources": {
+                  "limits": {
+                    "cpu": "1",
+                    "memory": "512Mi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "mountPath": "/certs",
+                    "name": "COCKR-db64bf4a-88b6-11f0-8572-d4d252cfcfc3-jix-koj-peg"
+                  }
+                ]
+              }
+            ],
+            "maxRetries": 3,
+            "serviceAccountName": "898934496030-compute@developer.gserviceaccount.com",
+            "timeoutSeconds": "1800",
+            "volumes": [
+              {
+                "name": "COCKR-db64bf4a-88b6-11f0-8572-d4d252cfcfc3-jix-koj-peg",
+                "secret": {
+                  "items": [
+                    {
+                      "key": "latest",
+                      "path": "root.crt"
+                    }
+                  ],
+                  "secretName": "COCKR-db64bf4a-88b6-11f0-8572-d4d252cfcfc3"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "status": {
+    "conditions": [
+      {
+        "lastTransitionTime": "2025-09-03T12:52:54.873470Z",
+        "status": "True",
+        "type": "Ready"
+      }
+    ],
+    "executionCount": 32,
+    "latestCreatedExecution": {
+      "completionStatus": "EXECUTION_FAILED",
+      "completionTimestamp": "2025-09-03T12:39:36.576558Z",
+      "creationTimestamp": "2025-09-03T12:38:13.435616Z",
+      "name": "cragcast-upsert-sbtqx"
+    },
+    "observedGeneration": 43
+  }
+}

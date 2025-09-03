@@ -88,30 +88,18 @@ def _resolve_dsn() -> str:
             return v.strip()
     raise RuntimeError("No DB URL provided")
 
-def _normalize_dsn(s: str) -> str:
-    s = s.strip()
-    # conninfo → pass through; optionally relax verify-full if no cert
-    if s.lower().startswith(("host=","user=","port=","dbname=","sslmode=")):
-        if "sslmode=verify-full" in s and "sslrootcert=" not in s:
-            s = s.replace("sslmode=verify-full", "sslmode=require")
-        return s
-    # URL → ensure sslmode=require and encode options '=' if present
-    if "sslmode=" not in s:
-        s += ("&" if "?" in s else "?") + "sslmode=require"
-    if "options=--cluster=" in s and "%3D" not in s:
-        s = s.replace("options=--cluster=", "options=--cluster%3D")
-    return s
 
 @contextmanager
 def get_connection():
     """
     Creates connection to Cockroach DB
     """
-
-    # Raises RuntimeError if no DATABSE_URL set
-    dsn = _normalize_dsn(_resolve_dsn())
-    with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
+    dsn = os.environ["DATABASE_URL"] 
+    conn = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
+    try:
         yield conn
+    finally:
+        conn.close()
 
 def run_sql(conn, sql:str, params:dict | None = None):
   """
