@@ -36,3 +36,5 @@ jobs_*
 
 --region
 --service-account
+
+cockroach-ca.crt

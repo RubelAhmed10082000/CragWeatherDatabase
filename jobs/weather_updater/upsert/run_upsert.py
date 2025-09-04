@@ -1,7 +1,13 @@
 import os 
 from datetime import datetime, timezone
 import time
-import itertools, os
+import itertools
+
+print("CERT_DIR_CONTENTS", os.listdir("/certs") if os.path.exists("/certs") else "NO_CERTS")
+
+
+
+
 
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (
@@ -62,6 +68,19 @@ def log_free_tier_usage(elapsed_seconds: float):
         "mem_gib": mem_gib
     })
 
+import os, hashlib, sys
+
+print("=== DEBUG START ===", file=sys.stderr)
+dburl = os.environ.get("DATABASE_URL", "")
+print("DBURL_SHA256", hashlib.sha256(dburl.encode()).hexdigest(), file=sys.stderr)
+
+for k in ("PGPASSWORD","PGUSER","PGHOST","PGPORT","PGDATABASE","DATABASE_URL"):
+    if k in os.environ:
+        val = os.environ[k]
+        shown = val if k == "DATABASE_URL" else val[:4] + "…"
+        print(f"WARN_PGVAR {k}={shown}", file=sys.stderr)
+
+print("=== DEBUG END ===", file=sys.stderr)
 
 # Main function which runs everything
 def main():

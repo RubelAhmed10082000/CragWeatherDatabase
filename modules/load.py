@@ -1,14 +1,21 @@
-# modules/load.py
+import warnings as _warnings
+
+raise ImportError(
+    "modules.load was removed. Use seed and upsert modules"
+)
+
+
 import os
 import time
 import pandas as pd
 import fsspec
 from psycopg import connect, sql
-from psycopg.rows import dict_row
+from psycopg.rows import dict_ro
 
 from modules.gcs_io import read_parquet, gcs_url
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+
+
 TABLE_ROUTES  = "dimroutes"
 TABLE_WEATHER = "dimhourlyweatherinfo"
 TABLE_FACT    = "fact_hourlyrouteweather"
@@ -28,13 +35,13 @@ def _copy_csv_to_table_from_gcs(csv_gs_uri: str, table: str, columns: list[str])
         COPY {table} ({cols})
         FROM STDIN WITH (FORMAT csv, DELIMITER ',', NULL '\\N', QUOTE '\"')
     """
-    with connect(DATABASE_URL) as conn, conn.cursor() as cur, fsspec.open(csv_gs_uri, "rb") as f:
-        with cur.copy(copy_sql) as cp:
-            for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                cp.write(chunk)
-        conn.commit()
-        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
-        return cur.fetchone()[0]
+    #with connect(DATABASE_URL) as conn, conn.cursor() as cur, fsspec.open(csv_gs_uri, "rb") as f:
+        #with cur.copy(copy_sql) as cp:
+            #for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                #cp.write(chunk)
+        #conn.commit()
+        #cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
+        #return cur.fetchone()[0]
 
 
 def parquet_to_csv_crag(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
@@ -132,8 +139,7 @@ def parquet_to_csv_weather(parquet_gs_uri: str, csv_gs_uri: str) -> list[str]:
     return cols
 
 
-def load_from_gcs(
-    crag_parquet_gs,weather_parquet_gs, csv_archive_prefix):
+def load_from_gcs(crag_parquet_gs,weather_parquet_gs, csv_archive_prefix):
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
 

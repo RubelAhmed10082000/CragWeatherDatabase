@@ -81,12 +81,13 @@ STYLES_ALLOWED      = [v for v in CLIMBING_STYLES if v.strip().upper() not in UN
 
 SCHEMA_VERSION_ID = "2025-08-28_optA_text_checks_v3"
 
-def _resolve_dsn() -> str:
-    for k in ("DATABASE_URL","DB_URL","SQLALCHEMY_DATABASE_URI","COCKROACH_URL"):
-        v = os.getenv(k)
-        if v and v.strip():
-            return v.strip()
-    raise RuntimeError("No DB URL provided")
+def _ensure_ssl_params(dsn: str) -> str:
+    if 'sslmode=' not in dsn:
+        dsn += ('&' if '?' in dsn else '?') + 'sslmode=verify-full'
+    if 'sslrootcert=' not in dsn:
+        dsn += '&sslrootcert=/certs/root.crt'
+    return dsn
+
 
 
 @contextmanager
@@ -94,7 +95,7 @@ def get_connection():
     """
     Creates connection to Cockroach DB
     """
-    dsn = os.environ["DATABASE_URL"] 
+    dsn = _ensure_ssl_params(os.environ['DATABASE_URL'])
     conn = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
     try:
         yield conn

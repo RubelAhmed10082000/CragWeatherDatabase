@@ -5,7 +5,8 @@ from modules.transform import transform
 from modules.clean import clean as clean_crag
 from modules.fetch_weather_data import fetch_weather_data
 from modules.clean_weather_data import clean_weather_data
-from modules.load import load_weather_snapshot_from_gcs
+
+
 
 from config import (
     RAW_JSON_BLOB,
@@ -39,11 +40,6 @@ def main():
     clean_weather_data(
         src_blob=WEATHER_RAW_BLOB,          
         dst_blob=WEATHER_CLEAN_BLOB,        
-    )
-
-    load_weather_snapshot_from_gcs(
-        weather_parquet_gs=gcs_url(*WEATHER_CLEAN_BLOB.split("/")),
-        csv_gs_uri=gcs_url(*CSV_LOAD_BLOB.split("/")),
     )
 
 if __name__ == "__main__":
