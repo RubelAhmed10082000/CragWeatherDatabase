@@ -642,23 +642,24 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
         JOIN effective_keys AS ek
           ON ek.crag_id = s.crag_id AND ek.date = s.date
         WHERE s.load_batch_id = %(b)s
-        ON CONFLICT (crag_id, date) DO UPDATE
-          SET temperature_c                 = EXCLUDED.temperature_c,
-              relative_humidity_percentage  = EXCLUDED.relative_humidity_percentage,
-              precipitation_mm              = EXCLUDED.precipitation_mm,
-              windspeed_ms                  = EXCLUDED.windspeed_ms,
-              forecast_run_ts               = EXCLUDED.forecast_run_ts,
-              horizon_hours                 = EXCLUDED.horizon_hours,
-              load_batch_id                 = EXCLUDED.load_batch_id
+        ON CONFLICT (crag_id, date) DO UPDATE SET 
+              temperature_c = EXCLUDED.temperature_c,
+              relative_humidity_percentage = EXCLUDED.relative_humidity_percentage,
+              precipitation_mm = EXCLUDED.precipitation_mm,
+              windspeed_ms = EXCLUDED.windspeed_ms,
+              forecast_run_ts = EXCLUDED.forecast_run_ts,
+              horizon_hours = EXCLUDED.horizon_hours,
+              load_batch_id = EXCLUDED.load_batch_id
         WHERE (
                fact_crag_hourly_weather.temperature_c                IS DISTINCT FROM EXCLUDED.temperature_c
             OR fact_crag_hourly_weather.relative_humidity_percentage IS DISTINCT FROM EXCLUDED.relative_humidity_percentage
             OR fact_crag_hourly_weather.precipitation_mm             IS DISTINCT FROM EXCLUDED.precipitation_mm
             OR fact_crag_hourly_weather.windspeed_ms                 IS DISTINCT FROM EXCLUDED.windspeed_ms
-        );
+        )
+        RETURNING 1;
         """
         cur.execute(insert_sql, params)
-        upserted = cur.rowcount or 0
+        upserted = len(cur.fetchall())
 
         conn.commit()
         return upserted, deleted
