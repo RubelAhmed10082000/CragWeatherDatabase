@@ -9,7 +9,7 @@ numpy==2.3.2
 psycopg
 gcsfs
 google-cloud-storage
-pydantic_settings
+pydantic-settings
 psycopg[binary]==3.2.9
 fsspec
 httpx[http2]
