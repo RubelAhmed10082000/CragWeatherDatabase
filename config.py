@@ -8,7 +8,6 @@ WEATHER_RAW_BLOB      = "processed/weather/weather_df.parquet"
 WEATHER_CLEAN_BLOB    = "cleaned/weather/cleaned_weather_df.parquet"
 CSV_LOAD_BLOB         = "load/weather_load.csv"
 
-DATABASE_URL = settings.database_url
 GCS_BUCKET   = settings.gcs_bucket
 MAX_POINTS = settings.wx_max_points
 
