@@ -4,7 +4,9 @@ from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
 from typing import Iterable, Mapping, Any, Tuple
-from datetime import timezone, datetime
+from datetime import timezone, datetime,timedelta
+
+
 
 SKIP_VIEWS   = os.getenv("SKIP_VIEWS", "0") == "1" 
 
@@ -18,7 +20,17 @@ REQUIRE_FULL_WINDOW = os.getenv("REQUIRE_FULL_WINDOW", "0") == "1"
 
 PARTIAL_WINDOW_POLICY = os.getenv("PARTIAL_WINDOW_POLICY", "allow")
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+WINDOW_HOURS = int(os.getenv("WINDOW_HOURS", "1"))          
+
+WINDOW_SAFETY_MIN = int(os.getenv("WINDOW_SAFETY_MIN", "10"))
+
+WINDOW_HOURS = max(1, WINDOW_HOURS)
+
+WINDOW_SAFETY_MIN = max(0, min(WINDOW_SAFETY_MIN, 30))
+
+TTL_ENABLED = os.getenv("STAGING_TTL_ENABLED", "0") == "1"
+
+
 
 ROCK_TYPES = ['Gritstone',
             'Limestone',
@@ -492,6 +504,8 @@ def delete_staging_batch(load_batch_id:str) -> int:
     """
     Deletes load batches
     """
+    if TTL_ENABLED:
+        return 0
 
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM public.stg_weather_route WHERE load_batch_id = %(b)s", 
@@ -522,6 +536,9 @@ def delete_old_staging(days: int = 7, conn=None, exclude_batch: str | None = Non
     Delete old rows from staging by age of staging event (staged_at).
     If `conn` is provided, run inside caller's transaction; otherwise open a one-off connection.
     """
+    if TTL_ENABLED:
+        return 0
+    
     if conn is None:
         with get_connection() as conn2:
             return delete_old_staging(days=days, conn=conn2, exclude_batch=exclude_batch)
@@ -555,6 +572,10 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
 
     if DISABLE_WRITES:
         return 0, 0
+    
+    now = datetime.now(timezone.utc)
+    end = (now - timedelta(minutes=WINDOW_SAFETY_MIN)).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=max(1, hours) - 1)
 
     # Build the CTE that defines which keys to touch
     if PARTIAL_WINDOW_POLICY == "skip":
@@ -574,18 +595,22 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
           FROM stage_keys k
           JOIN cov c USING (crag_id)
           WHERE c.n = %(h)s
+          AND date >= %(start_ts)s
+          AND date <  %(end_ts)s
         )
         """
-        params = {"b": load_batch_id, "h": hours, "run_ts": run_ts}
+        params = {"b": load_batch_id,"h": hours, "run_ts": run_ts, "start_ts": start, "end_ts": end}
     else:
         effective_keys_cte = """
         WITH effective_keys AS (
           SELECT DISTINCT crag_id, date
-          FROM public.stg_weather_route
+          FROM public.stg_weather_route AS s
           WHERE load_batch_id = %(b)s
+            AND s.date >= %(start_ts)s
+            AND s.date <  %(end_ts)s
         )
         """
-        params = {"b": load_batch_id, "run_ts": run_ts}
+        params = {"b": load_batch_id, "run_ts": run_ts, "start_ts": start, "end_ts": end}
 
     with get_connection() as conn, conn.cursor() as cur:
         if PARTIAL_WINDOW_POLICY == "fail":
@@ -594,6 +619,8 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
                   SELECT DISTINCT crag_id, date
                   FROM public.stg_weather_route
                   WHERE load_batch_id = %(b)s
+                  AND date >= %(start_ts)s
+                  AND date <  %(end_ts)s  
                 ),
                 cov AS (
                   SELECT crag_id, count(*)::int AS n
@@ -601,7 +628,7 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
                   GROUP BY crag_id
                 )
                 SELECT count(*) FROM cov WHERE n <> %(h)s
-            """, {"b": load_batch_id, "h": hours})
+            """, {"b": load_batch_id, "h": hours, "run_ts": run_ts, "start_ts": start, "end_ts": end})
             partial = cur.fetchone()[0]
             if partial:
                 raise Exception(f"Partial window detected for {partial} crag(s) in batch {load_batch_id}")
@@ -660,6 +687,21 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
         """
         cur.execute(insert_sql, params)
         upserted = len(cur.fetchall())
+
+        STAGING_DELETE_MODE = os.getenv("STAGING_DELETE_MODE", "window")  
+        deleted_staging = 0
+        
+        if STAGING_DELETE_MODE == "window":
+            delete_staging_sql = f"""
+            {effective_keys_cte}
+            DELETE FROM public.stg_weather_route AS s
+            USING effective_keys ek
+            WHERE s.load_batch_id = %(b)s
+            AND s.crag_id = ek.crag_id
+            AND s.date    = ek.date;
+            """
+            cur.execute(delete_staging_sql, params)
+            deleted_staging = cur.rowcount or 0 
 
         conn.commit()
         return upserted, deleted
