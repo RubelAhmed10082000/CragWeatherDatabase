@@ -1,5 +1,4 @@
-![image](https://github.com/user-attachments/assets/077c0bd1-01e6-43c9-8aa0-a2cc874e2297)
-
+![image](https://github.com/RubelAhmed10082000/CragWeatherDatabase/issues/1)
 **Crag Weather Database**
 
 I created a data pipeline that ingests both rock climbing location data and 7 day hourly weather forecasts that is then matched in a database.
