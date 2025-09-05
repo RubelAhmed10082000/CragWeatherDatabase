@@ -50,11 +50,13 @@ Product sense: built for end‑user speed and clarity, not a demo.
 
 **Next Steps**
 
-Frontend - I plan on learning FastAPI to be able create a frontend to display the locations and weather data to an end-user
+Frontend - Development of Frontend still in progress. Will include advanced filters 
 
-Scaling Up - I want to scale up my pipeline by adding climbing locations from other countries. However, this may require SPARK as well as a cloud based data warehouse
+CI/CD - Deep intergration, unit and E2E test still in progress
 
-Multiple DAGs - As you can see in the picture, I have only one DAG instance of which includes my entire ETL pipeline. I may want to make each stage of the pipeline its own instance in order to enhance modularity and be able to monitor the DAG.
+Monitoring - Plan on using Google Cloud Monitoring monitor pipeline
+
+Deployment - Plan of deploying via Netlify
 
 ***Tech Stack**
 • Python 
