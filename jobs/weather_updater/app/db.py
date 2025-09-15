@@ -691,17 +691,23 @@ def upsert_fact_window(load_batch_id: str, hours: int) -> Tuple[int, int]:
         STAGING_DELETE_MODE = os.getenv("STAGING_DELETE_MODE", "window")  
         deleted_staging = 0
         
-        if STAGING_DELETE_MODE == "window":
-            delete_staging_sql = f"""
-            {effective_keys_cte}
-            DELETE FROM public.stg_weather_route AS s
-            USING effective_keys ek
-            WHERE s.load_batch_id = %(b)s
-            AND s.crag_id = ek.crag_id
-            AND s.date    = ek.date;
-            """
-            cur.execute(delete_staging_sql, params)
-            deleted_staging = cur.rowcount or 0 
+        if not TTL_ENABLED:
+            if STAGING_DELETE_MODE == "window":
+                delete_staging_sql = f"""
+                {effective_keys_cte}
+                DELETE FROM public.stg_weather_route AS s
+                USING effective_keys ek
+                WHERE s.load_batch_id = %(b)s
+                AND s.crag_id = ek.crag_id
+                AND s.date    = ek.date;
+                """
+                cur.execute(delete_staging_sql, params)
+                deleted_staging = cur.rowcount or 0 
+        elif STAGING_DELETE_MODE == "off":
+            pass
+            
+        else:
+            print(f"[STAGING] Unknown STAGING_DELETE_MODE={STAGING_DELETE_MODE!r}; defaulting to 'off'")
 
         conn.commit()
         return upserted, deleted
