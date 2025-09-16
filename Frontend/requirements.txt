@@ -28,6 +28,8 @@ python-dotenv>=1.0.0
 SQLAlchemy>=2.0,<2.1
 sqlalchemy-cockroachdb>=2.0,<2.1
 psycopg2-binary==2.9.9
+gunicorn>=22.0
+
 
 # Test / tools
 pytest

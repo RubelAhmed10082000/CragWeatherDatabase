@@ -649,6 +649,20 @@
  * - Defensive: only runs if #map exists and Leaflet loaded.
  * - Uses server-rendered lat/lon to center and place a marker.
  * ---------------------------------------------------------------------------*/
+
+const API_BASE = document.querySelector('meta[name="api-base"]')?.content || '';
+
+async function getJSON(path, init) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    let body = '';
+    try { body = await res.text(); } catch {}
+    throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url} :: ${body}`);
+  }
+  return res.json();
+}
+
 try {
   const mapEl = document.getElementById('map');
   const hasLeaflet =

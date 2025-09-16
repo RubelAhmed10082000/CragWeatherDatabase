@@ -21,4 +21,5 @@ pytest.ini
 .reports/
 .env.local
 .env
+schema.sql
 
