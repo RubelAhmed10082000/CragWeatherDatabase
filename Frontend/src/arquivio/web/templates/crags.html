@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CragCast</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --success-color: #22c55e;
+            --warning-color: #eab308;
+            --danger-color: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .multi-select {
+        position: relative;
+        display: inline-block;
+        min-width: 220px;
+        flex: 1;              
+        }
+
+        .ms-trigger {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        box-sizing: border-box;                
+        width: 100%;
+        text-align: left;
+        padding: 0.75rem 1rem;                  
+        border: 2px solid var(--border-color);  
+        border-radius: 0.5rem;                  
+        font-size: 1rem;                        
+        line-height: 1.25rem;
+        background: rgba(255,255,255,0.6);      
+        color: var(--text-primary);
+        cursor: pointer;
+        outline: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: border-color .15s ease, background .15s ease;
+        }
+
+        .ms-trigger:hover {
+        background: rgba(255,255,255,0.7);
+        }
+
+        .ms-trigger:focus,
+        .multi-select.open .ms-trigger {
+        border-color: var(--primary-color);     
+        box-shadow: none;
+        }
+
+        .ms-caret {
+        margin-left: .5rem;
+        opacity: .7;
+        color: var(--text-secondary);
+        }
+
+  
+        .ms-menu {
+        position: absolute;
+        z-index: 30;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 100%;                       
+        max-height: 260px;
+        overflow: auto;
+        padding: .5rem;
+        border: 2px solid var(--border-color); 
+        border-radius: 0.5rem;                 
+        background: rgba(255,255,255,0.9);      
+        backdrop-filter: blur(6px);
+        box-shadow: 0 6px 24px rgba(0,0,0,.06);
+        display: none;
+        }
+
+        .multi-select.open .ms-menu { display: block; }
+
+        .ms-option {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .25rem .25rem;
+        border-radius: .25rem;
+        cursor: pointer;
+        }
+
+        .ms-option:hover { background: #f6f6f6; }
+
+        .ms-option input[type="checkbox"] {
+        accent-color: var(--text-secondary);
+        }
+
+        .filter-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-bottom: .25rem;
+        white-space: nowrap;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .search-section {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .search-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+
+        .search-input input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            padding-left: 2.5rem;
+            border: 2px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            background-color: white;
+            transition: all 0.2s;
+        }
+
+        .search-input input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .filter-row {
+            align-items: center;
+            min-height: 48px;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            min-width: 200px;
+            flex: 1;
+        }
+
+        .filter-group label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        .filter-group select {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            background-color: white;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .filter-group select:focus {
+            border-color: var(--primary-color);
+        }
+
+        .active-filters {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background-color: var(--bg-color);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+        }
+
+        .filter-tag button {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.25rem;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+
+        .filter-tag {
+        background-color: rgba(37, 116, 235, 0.12);   
+        border: 1px solid rgba(37, 99, 235, 0.25);   
+        color: #1e3a8a;                              
+        }
+
+        .filter-tag button:hover {
+            color: var(--danger-color);
+        }
+
+        .search-form .search-row button[type="submit"] {
+        padding: 0.75rem 1.5rem;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .search-form .search-row button[type="submit"]:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
+        .search-form .search-row button[type="submit"]:active { transform: translateY(0); }
+
+        .summary {
+            margin-top: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .table-container {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: var(--bg-color);
+            font-weight: 600;
+            color: var(--text-primary);
+            position: sticky;
+            top: 0;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: var(--bg-color);
+        }
+
+        .weather-cell {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .weather-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        .weather-loading {
+            color: var(--text-secondary);
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .weather-loading::after {
+            content: "";
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .pagination {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pagination a,
+        .pagination button,
+        .pagination span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        height: 2.25rem;          
+        min-width: 2.75rem;      
+        padding: 0 .75rem;       
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all .2s;
+        }
+
+
+
+        .pagination a:hover,
+        .pagination button:hover {
+        background-color: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+        }
+
+        .pagination .current {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+       .disabled {
+            background: var(--bg-disabled, #eeeeee);
+            color: var(--text-muted, #8a8f98);
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 13.333px;       
+            font-weight: 500;
+            border-color: var(--border-color);
+            cursor: not-allowed;
+            opacity: 1;                     
+            height: 2.25rem;                
+            min-width: 2.75rem;
+            padding: 0 .75rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .badge-temp {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-humidity {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-precip {
+            background-color: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        .crag-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            display: block;
+            padding: 0.25rem 0;
+        }
+
+        .crag-link:hover {
+            color: var(--primary-color);
+        }
+
+        .view-details {
+            font-size: 0.875rem;
+            color: var(--primary-color);
+            margin-top: 0.25rem;
+        }
+
+        .route-count {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background-color: var(--bg-color);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .text-secondary {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .sort-header {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .sort-header:hover {
+            color: var(--primary-color);
+        }
+
+        .sort-header::after {
+            content: "↕";
+            display: inline-block;
+            margin-left: 0.5rem;
+            opacity: 0.3;
+        }
+
+        .sort-header.active::after {
+            opacity: 1;
+            content: "↓";
+        }
+
+        .sort-header.active.desc::after {
+            content: "↑";
+        }
+
+       
+        .reset-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 2.25rem;
+            padding: 0.75rem 1.5rem;             
+            background-color: var(--primary-color);
+            color: #fff;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            text-decoration: none;
+        }
+
+        .filter-row { 
+            display: flex; 
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            flex-wrap: wrap; 
+            gap: 1rem; }
+
+        .filter-actions {
+        flex-basis: 100%;   
+        grid-column: 1 / -1;         
+        display: flex;
+        justify-content: flex-end; 
+        margin-top: .5rem;  
+        }
+
+        .search-combo{
+        display:flex; flex-wrap:wrap; align-items:center; gap:.25rem;
+        border: 2px solid var(--border-color);
+        border-radius:.5rem;
+        padding:.25rem .5rem;
+        background:#fff;
+        }
+        .search-combo:focus-within{
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+        }
+        .search-combo input{
+        flex:1; min-width:10rem; border:0; outline:0; background:transparent; padding:.5rem;
+        }
+        .filter-tags{ display:flex; flex-wrap:wrap; gap:.25rem; }
+
+        @media (min-width: 640px) {
+        .search-row { flex-wrap: nowrap; }
+        }
+
+        .wx {
+        display: flex;
+        flex-direction: column;     
+        align-items: flex-start;
+        gap: .25rem;
+        }
+        .wx-ic { width: 32px; height: 32px; }
+
+        .wx-summary {
+        font-size: .85rem;
+        color: var(--text-secondary);
+        text-transform: capitalize;
+        line-height: 1.1;
+        }
+
+        .wx-temp {
+        font-weight: 700;
+        font-size: 1rem;
+        line-height: 1.1;
+        }
+
+        .wx-meta {
+        display: flex;
+        flex-direction: column;   
+        gap: .15rem;
+        font-size: .78rem;
+        color: var(--text-secondary);
+        }
+        
+        .wx-index-filters{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .wxf-chip{ border:1px solid var(--border-color); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; user-select:none; }
+        .wxf-chip:hover{ background:var(--bg-color); }
+        .wxf-chip.active{ border-color:var(--primary-color); background:#eef2ff; font-weight:600; }
+        .wxf-temp{ display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:999px; border:1px solid var(--border-color); background:#fff; }
+        .wxf-temp.active{ border-color: var(--primary-color); background:#eef2ff; }
+        .wxf-temp-title{ font-size:12px; font-weight:600; }
+        .wxf-temp-controls{ display:flex; align-items:center; gap:8px; }
+        .wxf-temp-controls input[type="range"]{ width:120px; }
+        .wxf-temp-readout{ font-size:12px; opacity:.85; min-width:64px; text-align:center; }
+        .wxf-status{ font-size:12px; opacity:.8; }
+
+        .filter-group--weather{
+        flex: 1 1 100%;           
+        min-width: 100%;
+        display: flex;
+        flex-direction: column;  
+        align-items: stretch;
+        gap: .5rem;              
+        }
+
+       
+        .filter-group--weather .wx-index-filters{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        }
+
+        @media (max-width: 640px){
+        .wxf-temp-controls input[type="range"]{ width: 100px; }
+        }
+
+        .wxf-temp-controls{ display:flex; align-items:center; gap:8px; }
+
+        .wxf-range{ position:relative; width:240px; height:28px; }
+        .wxf-track{
+        position:absolute; left:0; right:0; top:50%;
+        height:4px; transform:translateY(-50%);
+        background:var(--border-color); border-radius:999px;
+        }
+        .wxf-fill{
+        position:absolute; top:50%; height:4px; transform:translateY(-50%);
+        background:var(--primary-color); opacity:.35; border-radius:999px;
+        left:0; right:0;
+        }
+
+        .wxf-range input[type="range"]{
+        position:absolute; left:0; right:0; top:0; bottom:0;
+        width:100%; margin:0; background:transparent;
+        -webkit-appearance:none; appearance:none; pointer-events: none; touch-action: none;
+    }
+
+        .wxf-range input[type="range"]::-webkit-slider-thumb{
+        -webkit-appearance:none; appearance:none;
+        width:14px; height:14px; border-radius:50%;
+        background:var(--primary-color); border:2px solid #fff;
+        box-shadow:0 0 0 1px var(--primary-color); cursor:pointer; pointer-events:auto;
+        }
+        .wxf-range input[type="range"]::-moz-range-thumb{
+        width:14px; height:14px; border-radius:50%;
+        background:var(--primary-color); border:2px solid #fff; cursor:pointer; pointer-events:auto;
+        }
+        .wxf-range input[type="range"]::-moz-range-track{ background:transparent; border:none; }
+
+        .wxf-range input[type="range"]{ z-index:1; }
+        .wxf-range input[type="range"]:focus,
+        .wxf-range input[type="range"]:active{ z-index:3; }
+
+        @media (max-width:640px){ .wxf-range{ width:180px; } }
+
+        #wxfRangeFilters{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        #wxfRangeFilters .wxf-chip{ padding:4px 8px; font-size:12px; }
+
+        .wxf-select{
+        height: 32px;
+        padding: 0 .5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: #fff;
+        font-size: 0.9rem;
+        cursor: pointer;
+        }
+        .wxf-select:focus{
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+        }
+
+        #wxfRangeSelect{
+        display: inline-flex;
+        align-items: center;          
+        gap: .5rem;
+        }
+        #wxfRangeSelect label{ margin: 0; }
+
+        .table-container td:nth-child(7),
+        .table-container th:nth-child(7) { font-size: inherit; color: inherit; }
+
+        .table-container + .pagination{
+        width: 100%;
+        display: flex;        
+        justify-content: center;
+        padding: 0 1.5rem;       
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CragCast</h1>
+            <p>Weather forecast for crags</p>
+        </div>
+
+        <div class="search-section">
+        <form class="search-form" method="get" action="/" id="searchForm">
+            <input type="hidden" name="page" id="pageInput" value="{{ current_page }}">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
+            <input type="hidden" name="sort_by" id="sortBy" value="{{ sort_by }}">
+            <input type="hidden" name="sort_order" id="sortOrder" value="{{ sort_order }}">
+            <input type="hidden" name="via" id="via" value="">
+            <div class="search-row">
+                <div class="search-input">
+                    <div class="search-combo">
+                        <div class="filter-tags" id="activeFilters"></div>
+                        <input
+                        type="text"
+                        name="q"                              
+                        value="{{ search_query or '' }}"
+                        placeholder="Search for crags by name..."
+                        aria-label="Search crags">
+                    </div>
+                    </div>
+                    
+                    <button type="submit">Apply Filters</button>
+                </div>
+
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label class="filter-label">Climbing Style</label>
+                    <div class="multi-select" data-name="style">
+                    <button type="button" class="ms-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ms-text">
+                        {% if sel.style and sel.style|length > 0 %}
+                            {{ sel.style|length }} selected
+                        {% else %}
+                            All
+                        {% endif %}
+                        </span>
+                        <span class="ms-caret">▾</span>
+                    </button>
+                    <div class="ms-menu" role="listbox" aria-multiselectable="true">
+                        {% for opt in climbing_styles %}
+                        {% set label = 'Unknown' if opt == '__unknown__' else opt %}
+                        <label class="ms-option">
+                            <input type="checkbox" name="style" value="{{ opt }}"
+                                {% if sel.style and opt in sel.style %}checked{% endif %}>
+                            <span>{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Rock Type</label>
+                    <div class="multi-select" data-name="rocktype">
+                    <button type="button" class="ms-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ms-text">
+                        {% if sel.rocktype and sel.rocktype|length > 0 %}
+                            {{ sel.rocktype|length }} selected
+                        {% else %}
+                            All
+                        {% endif %}
+                        </span>
+                        <span class="ms-caret">▾</span>
+                    </button>
+                    <div class="ms-menu" role="listbox" aria-multiselectable="true">
+                        {% for opt in rock_types %}
+                        {% set label = 'Unknown' if opt == '__unknown__' else opt %}
+                        <label class="ms-option">
+                            <input type="checkbox" name="rocktype" value="{{ opt }}"
+                                {% if sel.rocktype and opt in sel.rocktype %}checked{% endif %}>
+                            <span>{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">County</label>
+                    <div class="multi-select" data-name="county">
+                    <button type="button" class="ms-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ms-text">
+                        {% if sel.county and sel.county|length > 0 %}
+                            {{ sel.county|length }} selected
+                        {% else %}
+                            All
+                        {% endif %}
+                        </span>
+                        <span class="ms-caret">▾</span>
+                    </button>
+                    <div class="ms-menu" role="listbox" aria-multiselectable="true">
+                        {% for opt in counties %}
+                        {% set label = 'Unknown' if opt == '__unknown__' else opt %}
+                        <label class="ms-option">
+                            <input type="checkbox" name="county" value="{{ opt }}"
+                                {% if sel.county and opt in sel.county %}checked{% endif %}>
+                            <span>{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    </div>
+                </div>
+                <div class="filter-group filter-group--weather">
+
+                <div id="weatherFilters" class="wx-index-filters">
+                        <div class="wxf-subgroup" id="wxfRangeSelect">
+                        <label for="wxfWindow" class="filter-table">In the next:</label>
+                        <select id="wxfWindow" class="ms-trigger" aria-label="Time window">
+                            <option value="1" selected>1 hour</option>
+                            <option value="6">6 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24" >24 hours</option>
+                            <option value="48">48 hours</option>
+                            <option value="72">72 hours</option>
+                            <option value="168">7 days</option>
+                        </select>
+                        </div>
+                    <button type="button" class="wxf-chip" data-filter="dry" aria-pressed="false">Dry</button>
+                    <button type="button" class="wxf-chip" data-filter="low-wind" aria-pressed="false">Low wind(>28kmh)</button>
+
+               <div class="wxf-temp" id="wxfTemp">
+                <span class="wxf-temp-title">Temp</span>
+                <div class="wxf-temp-controls">
+                    <div class="wxf-range" id="wxfTempRange">
+                    <div class="wxf-track"></div>
+                    <div class="wxf-fill" id="wxfTempFill"></div>
+
+                    <input type="range" id="wxfTempMin" class="wxf-thumb min"
+                            min="-10" max="45" step="1" value="-10" aria-label="Minimum temperature">
+                    <input type="range" id="wxfTempMax" class="wxf-thumb max"
+                            min="-10" max="45" step="1" value="45"  aria-label="Maximum temperature">
+                    </div>
+
+                    <span class="wxf-temp-readout" id="wxfTempReadout">-10–45°C</span>
+                </div>
+                </div>
+                    <div class="filter-actions">
+                        <a href="{{ url_for('.crags_page') }}" class="reset-btn">Reset</a>
+                    </div>
+            </div>
+        </form>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>
+                            <div class="sort-header {% if sort_by == 'name' %}active {% if sort_order == 'desc' %}desc{% endif %}{% endif %}" 
+                                 data-sort="name">
+                                Name
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sort-header {% if sort_by == 'country' %}active {% if sort_order == 'desc' %}desc{% endif %}{% endif %}" 
+                                 data-sort="country">
+                                Location
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sort-header {% if sort_by == 'rocktype' %}active {% if sort_order == 'desc' %}desc{% endif %}{% endif %}" 
+                                 data-sort="rocktype">
+                                Rock Type
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sort-header {% if sort_by == 'climbing_style' %}active {% if sort_order == 'desc' %}desc{% endif %}{% endif %}"
+                            data-sort="climbing_style">
+                            Climbing Style
+                            </div>
+                        </th>
+                        <th>
+                            <div class="sort-header {% if sort_by == 'routes' %}active {% if sort_order == 'desc' %}desc{% endif %}{% endif %}" 
+                                 data-sort="routes">
+                                Routes
+                            </div>
+                        </th>
+                        <th>Weather</th>
+                        <th>Last Rained</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for crag in crags %}
+                    <tr data-crag-id="{{ crag.id }}" data-lat="{{ crag.latitude }}" data-lon="{{ crag.longitude }}">
+                        <td>
+                            <a href="/crag/{{ crag.id }}" class="crag-link">
+                                <strong>{{ crag.name | fmt }}</strong>
+                                <div class="view-details">View details →</div>
+                            </a>
+                        </td>
+                        <td>
+                            {{ crag.county | fmt}}<br>
+                            <span class="text-secondary">{{ crag.latitude }}, {{ crag.longitude }}</span>
+                        </td>
+                        {% set _raw = crag.rocktype %}
+                        {% set _rt = (_raw ~ '') | trim %}
+                        <td>{{ 'Unknown' if (not _rt or _rt|lower in ['<na>','na','none','null','nan']) else _rt }}</td>
+                        <td>{{ crag.climbing_style | fmt }}</td>
+                        <td>
+                            <span class="route-count">{{ crag.routes_count }} routes</span>
+                        </td>
+                        <td class="weather-data">
+                            <div class="weather-cell">
+                                {% if crag.weather and crag.weather.temperature is not none %}
+                                    <span class="badge badge-temp">{{ crag.weather.temperature }}°C</span>
+                                    <span class="badge badge-humidity">{{ crag.weather.humidity }}%</span>
+                                    <span class="badge badge-precip">{{ crag.weather.precipitation }}mm</span>
+                                {% else %}
+                                    <span class="weather-loading">Loading weather data...</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="last-rained">
+                        {% if crag.last_rained_ts %}
+                            {{ crag.last_rained_ts | timeago }}{% if crag.last_rain_severity %} ({{ crag.last_rain_severity|title }}){% endif %}
+                        {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            {% if current_page > 1 %}
+                <button type="current" onclick="gotoPage(1)">&laquo; First</button>
+                <button type="current" onclick="gotoPage({{ current_page - 1 }})">Previous</button>
+            {% else %}
+                <span class="disabled">&laquo; First</span>
+                <span class="disabled">Previous</span>
+            {% endif %}
+
+            <span class="current">Page {{ current_page }} of {{ total_pages }}</span>
+
+            {% if current_page < total_pages %}
+                <button type="button" onclick="gotoPage({{ current_page + 1 }})">Next</button>
+                <button type="button" onclick="gotoPage({{ total_pages }})">Last &raquo;</button>
+            {% else %}
+                <span class="disabled">Next</span>
+                <span class="disabled">Last &raquo;</span>
+            {% endif %}
+        </div>
+
+    <script>
+(() => {
+  // ---------------------------------------------------------------------------
+  // Page-level constants and helpers
+  // ---------------------------------------------------------------------------
+
+  /** Base path for weather icons (served from Flask static). */
+  const ICON_BASE = "{{ url_for('static', filename='icons') }}";
+
+  /**
+   * Visual-condition icon map used to render a compact weather badge.
+   * Note: `pickIcon()` chooses among these based on precip/wind/temp and daypart.
+   */
+  const VC_ICON_MAP = {
+    clear:         { file: "clear-day.png",     label: "Sunny" },
+    clear_night:   { file: "clear-night.png",   label: "Clear Night"},
+    partly_cloudy: { file: "partly-cloudy-day.png", label: "Partly Cloudy" },
+    cloudy:        { file: "cloudy.png",        label: "Cloudy" },
+    fog:           { file: "fog.png",           label: "Fog" },
+    wind:          { file: "wind.png",          label: "Windy" },
+    rain:          { file: "rain.png",          label: "Rain" },
+    snow:          { file: "snow.png",          label: "Snow" }
+  };
+
+  /** Temperature (°C) at/under which precip shows as snow. */
+  const SNOW_THRESHOLD_C = 0.5;
+
+  /** Cached references for the search form and the “active filters” chip bar. */
+  const form = document.getElementById('searchForm');
+  const chipsEl = document.getElementById('activeFilters');
+
+  // ---------------------------------------------------------------------------
+  // Persist/restore filters across navigation (sessionStorage)
+  // ---------------------------------------------------------------------------
+
+  /** Save current querystring (without leading "?") so we can restore it later. */
+  function saveCurrentFilters(){
+    try { sessionStorage.setItem('crags:lastQuery', location.search.replace(/^\?/, '')); } catch {}
+  }
+  /** Clear any saved filter state. */
+  function clearSavedFilters(){
+    try { sessionStorage.removeItem('crags:lastQuery'); } catch {}
+  }
+
+  // When navigating to a crag detail, remember current filters so back/forward keeps state.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a.crag-link');
+    if (a) saveCurrentFilters();
+  });
+  // Clicking "Reset" should nuke persisted state.
+  document.querySelector('.reset-btn')?.addEventListener('click', clearSavedFilters);
+
+  // On first load of "/", restore saved query if the URL has no query string.
+  (function restoreFiltersOnIndex(){
+    if (location.pathname !== '/') return;
+    if (!location.search) {
+      const saved = sessionStorage.getItem('crags:lastQuery');
+      if (saved) location.replace('/?' + saved);
+    } else {
+      saveCurrentFilters();
+    }
+  })();
+
+  // Small primitives used throughout.
+  const isNil = v => v == null || v === "";
+  const toNum = v => (isNil(v) ? null : Number(v));
+
+  // ---------------------------------------------------------------------------
+  // Weather cell: choose an icon + render compact weather card
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Decide which icon/label to show given a normalized weather point.
+   * Input `w` expects keys: temperature_c, precipitation_mm, relative_humidity_percentage, windspeed_ms.
+   */
+  function pickIcon(w){
+    const tC = toNum(w.temperature_c);
+    const pr = toNum(w.precipitation_mm);
+    const rh = toNum(w.relative_humidity_percentage);
+    const ms = toNum(w.windspeed_ms);
+    const hour = new Date().getHours();
+    const isNight = hour >= 20 || hour < 6;
+
+    if (tC != null && tC <= SNOW_THRESHOLD_C && pr > 0) return VC_ICON_MAP.snow;
+    if (pr > 0) {
+      const tier = pr >= 4 ? "Heavy Rain" : pr >= 1 ? "Rain" : "Light Rain";
+      return { ...VC_ICON_MAP.rain, label: tier };
+    }
+    if ((rh ?? 0) >= 98 && (ms ?? 0) <= 2) return VC_ICON_MAP.fog;
+    if ((ms ?? 0) >= 10) return VC_ICON_MAP.wind;
+    return isNight ? VC_ICON_MAP.clear_night : VC_ICON_MAP.clear;
+  }
+
+  /** Render HTML for the compact weather stack in each table row. */
+  function renderWxCard(w){
+    const tC  = toNum(w.temperature_c);
+    const ms  = toNum(w.windspeed_ms);
+    const kmh = ms != null ? Math.round(ms * 3.6) : null;
+    const pr  = toNum(w.precipitation_mm);
+    const rh  = toNum(w.relative_humidity_percentage);
+    const chosen  = pickIcon(w);
+    const iconUrl = `${ICON_BASE}/${chosen.file}`;
+    const summary = chosen.label;
+
+    return `
+      <div class="wx" role="group" aria-label="Current hour weather">
+        <img class="wx-ic" src="${iconUrl}" alt="${summary}">
+        <div class="wx-summary">${summary}</div>
+        <div class="wx-temp"><strong>${tC != null ? Math.round(tC) + "°C" : "N/A"}</strong></div>
+        <div class="wx-meta">
+          <span>Wind: ${kmh != null ? kmh + " km/h" : "N/A"}</span>
+          <span>Rain: ${pr != null ? (Math.round(pr * 10)/10) + " mm" : "N/A"}</span>
+          <span>Hum: ${rh != null ? Math.round(rh) + "%" : "N/A"}</span>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Fetch current/next-hour weather for a single row and replace its placeholder.
+   * Falls back to a soft "unavailable" message if anything goes wrong.
+   */
+  async function fetchWeather(lat, lon, row){
+    const cell = row.querySelector('.weather-data');
+    try {
+      const res = await fetch(`/api/weather/${lat}/${lon}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.debug("weather fetch failed", res.status, body);
+        cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
+        return;
+      }
+      const raw = await res.json();
+      // Normalize to consistent keys used by renderWxCard()
+      const w = {
+        temperature_c: raw.temperature,
+        relative_humidity_percentage: raw.humidity,
+        precipitation_mm: raw.precipitation,
+        windspeed_ms: raw.wind
+      };
+      cell.innerHTML = renderWxCard(w);
+    } catch (e) {
+      console.error('Error fetching weather:', e);
+      cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
+    }
+  }
+
+  // Lazy-load weather cells when rows enter viewport to avoid hammering the API.
+  const rowObserver = new IntersectionObserver((entries, obs) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const row = entry.target;
+      const lat = row.dataset.lat;
+      const lon = row.dataset.lon;
+      if (row.querySelector('.weather-loading')) fetchWeather(lat, lon, row);
+      obs.unobserve(row);
+    });
+  }, { root: null, rootMargin:'50px', threshold:0.1 });
+
+  // Queue observation for all rows that have coordinates + a loading placeholder.
+  document.querySelectorAll('tr[data-lat][data-lon]').forEach(row => {
+    if (row.querySelector('.weather-loading')) rowObserver.observe(row);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Chips for selected filters (style/rocktype/county)
+  // ---------------------------------------------------------------------------
+
+  /** Return [{name, value, text}] for all checked options across the multi-selects. */
+  function selectedFilters(){
+    const groups = [
+      {name:'style',    label:'Style'},
+      {name:'rocktype', label:'Rock'},
+      {name:'county',   label:'County'}
+    ];
+    const out = [];
+    for (const g of groups){
+      form?.querySelectorAll(`.multi-select input[name="${g.name}"]:checked`).forEach(cb=>{
+        const label = cb.nextElementSibling?.textContent?.trim() || cb.value;
+        out.push({ name:g.name, value:cb.value, text:label });
+      });
+    }
+    return out;
+  }
+
+  /** Render clickable chips for the current selection state. */
+  function renderChips(){
+    if (!chipsEl) return;
+    chipsEl.innerHTML = '';
+    for (const f of selectedFilters()){
+      const chip = document.createElement('span');
+      chip.className = 'filter-tag';
+      chip.dataset.name = f.name;
+      chip.dataset.value = f.value;
+      chip.innerHTML = `${f.text}<button type="button" aria-label="Remove ${f.text}">&times;</button>`;
+      chip.querySelector('button').addEventListener('click', ()=>{
+        const sel = `.multi-select input[name="${f.name}"][value="${CSS.escape(f.value)}"]`;
+        const box = form.querySelector(sel);
+        if (box){
+          box.checked = false;
+          updateButtonText(box.closest('.multi-select'));
+          const p = form.querySelector('input[name="page"]'); if (p) p.value = 1;
+          renderChips();
+        }
+      });
+      chipsEl.appendChild(chip);
+    }
+    // Weather chip (range/flags) gets handled separately so it stays in sync.
+    renderWeatherChip();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-select dropdown UX (open/close, focus, counts)
+  // ---------------------------------------------------------------------------
+
+  // Toggle a multi-select menu, closing others.
+  document.querySelectorAll('.multi-select .ms-trigger').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const wrapper = e.currentTarget.closest('.multi-select');
+      const isOpen = wrapper.classList.contains('open');
+      document.querySelectorAll('.multi-select.open').forEach(w => w.classList.remove('open'));
+      wrapper.classList.toggle('open', !isOpen);
+      btn.setAttribute('aria-expanded', String(!isOpen));
+    });
+  });
+  // Close all menus when clicking outside.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.multi-select')) {
+      document.querySelectorAll('.multi-select.open').forEach(w => {
+        w.classList.remove('open');
+        const t = w.querySelector('.ms-trigger');
+        if (t) t.setAttribute('aria-expanded', 'false');
+      });
+    }
+  });
+  // ESC also closes the active menu(s).
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.multi-select.open').forEach(w => {
+        w.classList.remove('open');
+        const t = w.querySelector('.ms-trigger');
+        if (t) t.setAttribute('aria-expanded', 'false');
+      });
+    }
+  });
+
+  /** Update the trigger button text to “N selected” (or “All” when zero). */
+  function updateButtonText(wrapper){
+    const box = wrapper.querySelector('.ms-text');
+    const checked = wrapper.querySelectorAll('input[type="checkbox"]:checked');
+    box.textContent = checked.length ? `${checked.length} selected` : 'All';
+  }
+  document.querySelectorAll('.multi-select').forEach(updateButtonText);
+
+  // When a checkbox changes, reflect count + reset to page 1 + refresh chips.
+  document.querySelectorAll('.multi-select input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      updateButtonText(cb.closest('.multi-select'));
+      const p = form.querySelector('input[name="page"]'); if (p) p.value = 1;
+      renderChips();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sorting & pagination controls
+  // ---------------------------------------------------------------------------
+
+  /**
+   * NOTE: There are two nearly identical sort handlers + gotoPage definitions in
+   * this file for historical reasons. They are functionally equivalent; kept as-is
+   * to avoid regressions during the deadline crunch.
+   */
+  document.querySelectorAll('.sort-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const sortByInput   = document.getElementById('sortBy');
+      const sortOrderInput= document.getElementById('sortOrder');
+      const sortBy = header.dataset.sort;
+      const newOrder = (sortBy === sortByInput.value && sortOrderInput.value === 'asc') ? 'desc' : 'asc';
+      sortByInput.value = sortBy;
+      sortOrderInput.value = newOrder;
+      form.querySelector('input[name="page"]').value = 1;
+
+      persistWeatherHidden(form);
+      safeSubmit(form);
+    });
+  });
+
+  /** Programmatic page jump (used by the pager buttons). */
+  function gotoPage(p) {
+    const pageInput = document.querySelector('#pageInput') ||
+                      document.querySelector('input[name="page"]');
+    if (pageInput) pageInput.value = p;
+    const via = form.querySelector('#via'); if (via) via.value = 'pager';
+
+    persistWeatherHidden(form);
+    safeSubmit(form);
+  }
+  window.gotoPage = gotoPage;
+
+  /** Convenience clearers used by chips & UI. */
+  function clearOne(name, value) {
+    const sel = `.multi-select input[name="${name}"][value="${CSS.escape(value)}"]`;
+    document.querySelectorAll(sel).forEach(el => el.checked = false);
+    document.querySelectorAll(`.multi-select[data-name="${name}"]`).forEach(updateButtonText);
+    const p = form.querySelector('input[name="page"]'); if (p) p.value = 1;
+    renderChips();
+  }
+  function clearAll() {
+    document.querySelectorAll('.multi-select input[type="checkbox"]').forEach(el => el.checked = false);
+    document.querySelectorAll('.multi-select').forEach(updateButtonText);
+    const q = form.querySelector('input[name="q"], input[name="search"]'); if (q) q.value = '';
+    const p = form.querySelector('input[name="page"]'); if (p) p.value = 1;
+    renderChips();
+  }
+  function clearSearch() {
+    const q = form.querySelector('input[name="q"], input[name="search"]'); if (q) q.value = '';
+    const p = form.querySelector('input[name="page"]'); if (p) p.value = 1;
+  }
+  window.clearOne = clearOne;
+  window.clearAll = clearAll;
+  window.clearSearch = clearSearch;
+
+  /** Keep weather filter state in hidden inputs so the server sees it on submit. */
+  function persistWeatherHidden(form){
+    const bar = document.getElementById('weatherFilters');
+    const windowSel = document.getElementById('wxfWindow');
+    const dryOn  = !!bar?.querySelector('.wxf-chip[data-filter="dry"].active');
+    const lowOn  = !!bar?.querySelector('.wxf-chip[data-filter="low-wind"].active');
+    const tempOn = !!document.getElementById('wxfTemp')?.classList.contains('active');
+    const tMin   = document.getElementById('wxfTempMin')?.value ?? '';
+    const tMax   = document.getElementById('wxfTempMax')?.value ?? '';
+
+    const setHidden = (name, value) => {
+      let el = form.querySelector(`input[name="${name}"]`);
+      if (!el){ el = document.createElement('input'); el.type='hidden'; el.name=name; form.appendChild(el); }
+      el.value = value;
+    };
+    setHidden('wxf_window',   windowSel?.value || '');
+    setHidden('wxf_dry',      dryOn ? '1' : '');
+    setHidden('wxf_low',      lowOn ? '1' : '');
+    setHidden('wxf_temp_on',  tempOn ? '1' : '0');
+    setHidden('wxf_temp_min', tMin);
+    setHidden('wxf_temp_max', tMax);
+  }
+
+  /** Robust submit that works across browsers (uses requestSubmit when available). */
+  function safeSubmit(form){
+    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+    else {
+      const btn = form.querySelector('button[type="submit"], input[type="submit"]');
+      if (btn) btn.click(); else form.submit();
+    }
+  }
+
+  // Ensure we reset to page 1 on new searches (unless explicitly paging),
+  // and persist the weather hidden inputs before the request goes out.
+  form.addEventListener('submit', () => {
+    const viaVal = form.querySelector('#via')?.value || '';
+    if (viaVal !== 'pager') {
+      const p = form.querySelector('input[name="page"]');
+      if (p) p.value = 1;
+    }
+    persistWeatherHidden(form);
+  });
+
+  // (Duplicate gotoPage/sort handler retained; see note above.)
+  function gotoPage(p){
+    const pageInput = document.querySelector('#pageInput') ||
+                      document.querySelector('input[name="page"]');
+    if (pageInput) pageInput.value = p;
+    const via = form.querySelector('#via'); if (via) via.value = 'pager';
+
+    persistWeatherHidden(form);
+    safeSubmit(form);
+  }
+  window.gotoPage = gotoPage;
+
+  document.querySelectorAll('.sort-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const sortByInput    = document.getElementById('sortBy');
+      const sortOrderInput = document.getElementById('sortOrder');
+      const sortBy = header.dataset.sort;
+      const newOrder = (sortBy === sortByInput.value && sortOrderInput.value === 'asc') ? 'desc' : 'asc';
+      sortByInput.value = sortBy;
+      sortOrderInput.value = newOrder;
+
+      const p = form.querySelector('input[name="page"]'); if (p) p.value = 1;
+      persistWeatherHidden(form);
+      safeSubmit(form);
+    });
+  });
+
+  // Initialize counts and chips on first paint.
+  document.querySelectorAll('.multi-select').forEach(updateButtonText);
+  renderChips();
+
+  // ---------------------------------------------------------------------------
+  // Weather-aware client-side filtering (Dry / Low Wind / Temp range)
+  // ---------------------------------------------------------------------------
+
+  /** Default hours to request for forecast rows; synced with the “In the next” select. */
+  let hoursWindow = 24;
+
+  /** API path builder for forecast list. */
+  const ENDPOINT = (id, h = hoursWindow) => `/api/weather/crags/${id}/forecast?hours=${h}`;
+
+  /** Thresholds for the quick chips. Tweak to tune sensitivity. */
+  const TH = { dry_rain_mm_max: 0.0, wind_ms_max: 8 };
+
+  /** Fraction of hours that must pass a condition to accept a crag (e.g., 80% dry). */
+  const PCT_REQUIRED = 0.80;
+
+  /** Only consider daytime hours if enabled (9→21 here). */
+  const DAYPART = { enabled: true, start: 9, end: 21 };
+
+  // Key pickers to handle API shape variations.
+  const pickNum = (o, ks) => { for (const k of ks) if (Object.prototype.hasOwnProperty.call(o,k) && !isNil(o[k])) return toNum(o[k]); return null; };
+  const pickStr = (o, ks) => { for (const k of ks) if (Object.prototype.hasOwnProperty.call(o,k) && !isNil(o[k])) return String(o[k]); return null; };
+
+  /**
+   * Fetch & normalize forecast rows for a given crag.
+   * Returns an array sorted by timestamp, limited to `h` items.
+   */
+  async function fetchForecast(cragId, h = hoursWindow){
+    const res = await fetch(ENDPOINT(cragId, h));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data ? [data] : []);
+    return list
+      .map(dp => ({
+        timestamp:        pickStr(dp, ["timestamp","time","ts","date","datetime"]),
+        temperature_c:    pickNum(dp, ["temperature_c","temperature","temp_c","temp","temperature_2m"]),
+        precipitation_mm: pickNum(dp, ["precipitation_mm","precipitation","precip_mm","precip","rain_mm","rain"]),
+        windspeed_ms:     pickNum(dp, ["windspeed_ms","wind_speed_ms","wind_ms","wind_speed","wind"])
+      }))
+      .filter(dp => dp.timestamp)
+      .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .slice(0, h);
+  }
+
+  // Simple concurrency-limited fetch queue + cache so we don’t stampede the API.
+  const rowsCache = new Map();
+  const queue = [];
+  let running = 0;
+  const CONCURRENCY = 4;
+
+  function ckey(id, h){ return `${h}:${id}`; }
+  function schedule(id, h = hoursWindow){
+    return new Promise(resolve => { queue.push({ id, h, resolve }); pump(); });
+  }
+  async function pump(){
+    if (running >= CONCURRENCY) return;
+    const job = queue.shift(); if (!job) return;
+    running++;
+    try {
+      const key = ckey(job.id, job.h);
+      if (!rowsCache.has(key)) rowsCache.set(key, await fetchForecast(job.id, job.h));
+      job.resolve(rowsCache.get(key));
+    } finally { running--; pump(); }
+  }
+
+  // Temp slider helpers.
+  function getTempSelection(){
+    const min = Number(document.getElementById('wxfTempMin')?.value ?? -10);
+    const max = Number(document.getElementById('wxfTempMax')?.value ?? 45);
+    return { min, max };
+  }
+  function setTempReadout(min, max){
+    const ro = document.getElementById('wxfTempReadout');
+    if (ro) ro.textContent = `${min}–${max}°C`;
+  }
+  /** Whether a timestamp falls in the configured daypart window. */
+  function inDaypart(ts, dp = DAYPART){
+    if (!dp.enabled) return true;
+    const h = new Date(ts).getHours();
+    return dp.start <= dp.end ? (h >= dp.start && h < dp.end) : (h >= dp.start || h < dp.end);
+  }
+
+  /** Snapshot current weather flags/values from the bar. */
+  function getFlags(){
+    const bar = document.getElementById('weatherFilters');
+    const dryBtn = bar?.querySelector('.wxf-chip[data-filter="dry"]');
+    const lowBtn = bar?.querySelector('.wxf-chip[data-filter="low-wind"]');
+    const tempOn = !!document.getElementById('wxfTemp')?.classList.contains('active');
+    const { min: tMinSel, max: tMaxSel } = getTempSelection();
+    return {
+      dry: !!dryBtn?.classList.contains('active'),
+      low: !!lowBtn?.classList.contains('active'),
+      tempOn, tMinSel, tMaxSel
+    };
+  }
+
+  /**
+   * Apply current weather filters client-side by hiding/showing table rows.
+   * Uses the cached/scheduled forecast data per row.
+   */
+  async function applyCurrentFilters(){
+    const status = document.getElementById('wxfStatus');
+    if (status){ status.hidden = false; status.textContent = 'Loading…'; }
+
+    const rowsEls = Array.from(document.querySelectorAll('[data-crag-id]'));
+    const flags = getFlags();
+
+    await Promise.all(rowsEls.map(async el => {
+      const id = el.getAttribute('data-crag-id');
+      const key = ckey(id, hoursWindow);
+      const rows = rowsCache.has(key) ? rowsCache.get(key) : await schedule(id, hoursWindow);
+
+      const considered = rows.filter(r => inDaypart(r.timestamp));
+      const n = considered.length;
+
+      const fracDry  = n ? considered.filter(r => (r.precipitation_mm ?? 0) <= TH.dry_rain_mm_max).length / n : null;
+      const fracLow  = n ? considered.filter(r => (r.windspeed_ms ?? 0) <  TH.wind_ms_max).length / n : null;
+      const fracTemp = n ? considered.filter(r => {
+        const t = r.temperature_c;
+        return t != null && t >= flags.tMinSel && t <= flags.tMaxSel;
+      }).length / n : null;
+
+      let show = true;
+      if (flags.dry)    show = show && (fracDry  != null && fracDry  >= PCT_REQUIRED);
+      if (flags.low)    show = show && (fracLow  != null && fracLow  >= PCT_REQUIRED);
+      if (flags.tempOn) show = show && (fracTemp != null && fracTemp >= PCT_REQUIRED);
+
+      el.style.display = show ? '' : 'none';
+    }));
+
+    if (status) status.hidden = true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Weather chip rendering + reset behaviors
+  // ---------------------------------------------------------------------------
+
+  /** Build a human-readable label for the weather chip (e.g., “24h, Dry, 10–20°C”). */
+  function getWeatherTagText(){
+    const parts = [];
+    const windowSel = document.getElementById('wxfWindow');
+    const h = Number(windowSel?.value || 24);
+    if (windowSel) parts.push(`${h}h`);
+    const bar = document.getElementById('weatherFilters');
+    if (bar?.querySelector('.wxf-chip[data-filter="dry"].active')) parts.push('Dry');
+    if (bar?.querySelector('.wxf-chip[data-filter="low-wind"].active')) parts.push('Low wind');
+    if (document.getElementById('wxfTemp')?.classList.contains('active')) {
+      const { min, max } = getTempSelection();
+      parts.push(`${min}–${max}°C`);
+    }
+    return parts.join(', ');
+  }
+
+  /** Whether any weather filter diverges from defaults. */
+  function isWeatherActive(){
+    const bar = document.getElementById('weatherFilters');
+    const dry = !!bar?.querySelector('.wxf-chip[data-filter="dry"].active');
+    const low = !!bar?.querySelector('.wxf-chip[data-filter="low-wind"].active');
+    const tempOn = !!document.getElementById('wxfTemp')?.classList.contains('active');
+    const sel = document.getElementById('wxfWindow');
+    const def = Number(sel?.dataset.default || sel?.options?.[0]?.value || 24);
+    const h = Number(sel?.value || def);
+    const hoursChanged = sel ? (h !== def) : false;
+    return dry || low || tempOn || hoursChanged;
+  }
+
+  /** Return weather filters to default state and sync UI. */
+  function resetWeatherFilters(){
+    const bar = document.getElementById('weatherFilters');
+    bar?.querySelectorAll('.wxf-chip').forEach(b=>{
+      b.classList.remove('active'); b.setAttribute('aria-pressed','false');
+    });
+    const sMin = document.getElementById('wxfTempMin');
+    const sMax = document.getElementById('wxfTempMax');
+    const fill = document.getElementById('wxfTempFill');
+    const box  = document.getElementById('wxfTemp');
+    if (sMin && sMax){
+      const MINV = Number(sMin.min ?? -10);
+      const MAXV = Number(sMax.max ?? 45);
+      sMin.value = String(MINV);
+      sMax.value = String(MAXV);
+      const pct  = v => ((Number(v) - MINV) / (MAXV - MINV)) * 100;
+      if (fill){ fill.style.left = `${pct(MINV)}%`; fill.style.right = `${100 - pct(MAXV)}%`; }
+      setTempReadout(MINV, MAXV);
+      box?.classList.remove('active');
+    }
+    const windowSel = document.getElementById('wxfWindow');
+    if (windowSel){
+      const def = windowSel.dataset.default || windowSel.options?.[0]?.value || '24';
+      windowSel.value = String(def);
+      hoursWindow = Number(windowSel.value) || 24;
+    }
+  }
+
+  /** Create/update the weather chip in the chip bar, or remove it if inactive. */
+  function renderWeatherChip(){
+    if (!chipsEl) return;
+    const existing = chipsEl.querySelector('.filter-tag[data-name="weather"]');
+    if (!isWeatherActive()){
+      existing?.remove();
+      return;
+    }
+    const html = `Weather: ${getWeatherTagText()}<button type="button" aria-label="Remove weather filter">&times;</button>`;
+    if (existing){
+      existing.innerHTML = html;
+      return;
+    }
+    const chip = document.createElement('span');
+    chip.className = 'filter-tag';
+    chip.dataset.name = 'weather';
+    chip.innerHTML = html;
+    chip.querySelector('button').addEventListener('click', ()=>{
+      resetWeatherFilters();
+      renderChips();    // re-sync chips & UI
+    });
+    chipsEl.appendChild(chip);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Wire up weather filter controls (chips, sliders, “In the next” select)
+  // ---------------------------------------------------------------------------
+
+  function initWxFilters(){
+    const bar = document.getElementById('weatherFilters');
+    const windowSel = document.getElementById('wxfWindow');
+
+    // Hours window select drives `hoursWindow` value and chip text.
+    if (windowSel){
+      if (!windowSel.dataset.default) windowSel.dataset.default = windowSel.value;
+      hoursWindow = Number(windowSel.value) || 24;
+      windowSel.addEventListener('change', () => {
+        hoursWindow = Number(windowSel.value) || 24;
+        renderChips();
+      });
+    }
+
+    // Toggle chips (Dry / Low wind)
+    if (bar){
+      bar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.wxf-chip');
+        if (!btn) return;
+        const nowActive = !btn.classList.contains('active');
+        btn.classList.toggle('active', nowActive);
+        btn.setAttribute('aria-pressed', String(nowActive));
+        renderChips();
+      });
+    }
+
+    // Dual temp range sliders with visual fill + active state on box.
+    const sMin = document.getElementById('wxfTempMin');
+    const sMax = document.getElementById('wxfTempMax');
+    const fill = document.getElementById('wxfTempFill');
+    const tempBox = document.getElementById('wxfTemp');
+    if (sMin && sMax && fill){
+      const MINV = Number(sMin.min ?? -10);
+      const MAXV = Number(sMax.max ?? 45);
+      const pct  = v => ((Number(v) - MINV) / (MAXV - MINV)) * 100;
+
+      function syncDual(){
+        let lo = Math.max(MINV, Math.min(MAXV, Number(sMin.value)));
+        let hi = Math.max(MINV, Math.min(MAXV, Number(sMax.value)));
+        if (lo > hi) [lo, hi] = [hi, lo];
+        sMin.value = String(lo); sMax.value = String(hi);
+        setTempReadout(lo, hi);
+        fill.style.left = `${pct(lo)}%`; fill.style.right = `${100 - pct(hi)}%`;
+        if (lo > MINV || hi < MAXV) tempBox?.classList.add('active');
+        else tempBox?.classList.remove('active');
+        renderChips();
+      }
+
+      // Ensure the thumb you grab is the one that moves (z-index hack).
+      const onDown = (inp) => {
+        if (inp === sMin){
+          sMin.style.pointerEvents = 'auto';
+          sMax.style.pointerEvents = 'none';
+          sMin.style.zIndex = '4'; sMax.style.zIndex = '2';
+        } else {
+          sMax.style.pointerEvents = 'auto';
+          sMin.style.pointerEvents = 'none';
+          sMax.style.zIndex = '4'; sMin.style.zIndex = '2';
+        }
+      };
+      const onUp = () => {
+        sMin.style.pointerEvents = '';
+        sMax.style.pointerEvents = '';
+        sMin.style.zIndex = '';
+        sMax.style.zIndex = '';
+      };
+
+      [sMin, sMax].forEach(inp => {
+        inp.addEventListener('pointerdown', () => onDown(inp));
+        inp.addEventListener('pointerup', onUp);
+        inp.addEventListener('pointercancel', onUp);
+        inp.addEventListener('blur', onUp);
+        inp.addEventListener('input',  syncDual);
+        inp.addEventListener('change', syncDual);
+      });
+
+      // Initialize readout + fill once.
+      syncDual();
+    }
+
+    // On load, restore weather state from query params (supports back/forward).
+    (function restoreWeatherFromQuery(){
+      const params = new URLSearchParams(location.search);
+      const hasAny = params.has('wxf_window') || params.get('wxf_dry') === '1' ||
+                     params.get('wxf_low') === '1' || params.get('wxf_temp_on') === '1';
+      if (!hasAny) { renderChips(); return; }
+
+      if (windowSel && params.get('wxf_window')){
+        windowSel.value = params.get('wxf_window');
+        hoursWindow = Number(windowSel.value) || hoursWindow;
+      }
+
+      const setActive = (btn, on) => { if (!btn) return; btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+      setActive(bar?.querySelector('.wxf-chip[data-filter="dry"]'), params.get('wxf_dry') === '1');
+      setActive(bar?.querySelector('.wxf-chip[data-filter="low-wind"]'), params.get('wxf_low') === '1');
+
+      const tOn  = params.get('wxf_temp_on') === '1';
+      const sMin = document.getElementById('wxfTempMin');
+      const sMax = document.getElementById('wxfTempMax');
+      const tempBox = document.getElementById('wxfTemp');
+      if (sMin && sMax){
+        if (params.has('wxf_temp_min')) sMin.value = params.get('wxf_temp_min');
+        if (params.has('wxf_temp_max')) sMax.value = params.get('wxf_temp_max');
+        const evt = new Event('input'); sMin.dispatchEvent(evt); sMax.dispatchEvent(evt);
+        if (tOn) tempBox?.classList.add('active');
+      }
+
+      // Apply visibility + sync chips now that state is restored.
+      applyCurrentFilters();
+      renderChips();
+    })();
+  }
+
+  // One-time boot: wire weather filter UI.
+  document.addEventListener('DOMContentLoaded', () => {
+    initWxFilters();
+  });
+})();
+</script>
+</body>
+</html>
