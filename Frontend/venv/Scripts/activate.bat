@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\44785\OneDrive - OneWorkplace\Documents\Coding\FLSK\Arquivio\venv
+set VIRTUAL_ENV=D:\44785\Documents\Projects\Crag-Weather-Database\frontend\venv
 
 if not defined PROMPT set PROMPT=$P$G
 

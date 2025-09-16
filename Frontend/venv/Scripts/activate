@@ -35,7 +35,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\44785\OneDrive - OneWorkplace\Documents\Coding\FLSK\Arquivio\venv"
+VIRTUAL_ENV="D:\44785\Documents\Projects\Crag-Weather-Database\frontend\venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
