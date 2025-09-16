@@ -11,6 +11,7 @@ venv
 venv/
 .vscode
 pytest.ini
+.venv
 
 .vscode/
 **/.vscode/
@@ -18,3 +19,4 @@ pytest.ini
 .ruff_cache/
 .reports/
 .env.local
+
