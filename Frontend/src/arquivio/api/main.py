@@ -358,9 +358,14 @@ def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), res
     Raises:
         HTTPException: 404 if no forecast data is available.
     """
-
+    orig = hours
+    
     cap = int(os.getenv("FORECAST_MAX_HOURS", "168"))
     hours = min(hours, cap)
+    if os.getenv("RU_DEGRADE_24H", "0") == "1":
+        hours = min(hours, 24)
+    if response is not None and hours != orig:
+        response.headers["x-clamped-hours"] = str(hours)
 
     ttl_s = int(os.getenv("FORECAST_TTL_S", "600"))          
     buster = os.getenv("FORECAST_CACHE_BUSTER", "")         
