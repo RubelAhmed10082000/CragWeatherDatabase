@@ -12,16 +12,17 @@ frontend via WSGI. Cockroach DB CragWeatherDatabase represented as db
 
 import os
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.middleware.wsgi import WSGIMiddleware
-
 from arquivio.web.app import app as flask_app
-
 from .services.cockroach import db
+import os
+from time import monotonic
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import text
 
 
 @asynccontextmanager
@@ -45,7 +46,17 @@ if origins:
         allow_headers=["*"],
         allow_credentials=True,
     )
+    
+_FORECAST_CACHE: dict[tuple[str, int, str], dict[str, object]] = {}
 
+def _ttl_get(key, ttl_s: int, loader):
+    now = monotonic()
+    hit = _FORECAST_CACHE.get(key)
+    if hit and (now - hit["t"] < ttl_s):
+        return hit["v"]
+    val = loader()
+    _FORECAST_CACHE[key] = {"t": now, "v": val}
+    return val
 
 @app.get("/debug/db")
 def db_debug():
@@ -280,12 +291,25 @@ def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168)):
     Raises:
         HTTPException: 404 if no forecast data is available.
     """
-    # Calls DB layer; returns a pandas DataFrame or empty DataFrame.
-    df = db.get_forecast(str(crag_id), hours=hours)
-    if df is None or df.empty:
-        # No data is a 404, not an empty success payload.
-        raise HTTPException(status_code=404, detail="No forecast available")
-    return df.to_dict(orient="records")
+
+    cap = int(os.getenv("FORECAST_MAX_HOURS", "168"))
+    hours = min(hours, cap)
+
+    ttl_s = int(os.getenv("FORECAST_TTL_S", "600"))          
+    buster = os.getenv("FORECAST_CACHE_BUSTER", "")         
+    key = (str(crag_id), int(hours), buster)
+
+    def load():
+        # Calls DB layer; returns a pandas DataFrame or empty DataFrame.
+        df = db.get_forecast(str(crag_id), hours=hours)
+        if df is None or df.empty:
+            # No data is a 404, not an empty success payload.
+            raise HTTPException(status_code=404, detail="No forecast available")
+        return df.to_dict(orient="records")
+    
+    return _ttl_get(key, ttl_s, load)
+
+
 
 
 app.mount("/", WSGIMiddleware(flask_app))

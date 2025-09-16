@@ -20,4 +20,5 @@ pytest.ini
 .ruff_cache/
 .reports/
 .env.local
+.env
 
