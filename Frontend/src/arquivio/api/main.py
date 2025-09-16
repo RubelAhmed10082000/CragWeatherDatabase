@@ -21,8 +21,15 @@ from arquivio.web.app import app as flask_app
 from .services.cockroach import db
 import os
 from time import monotonic
-from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
+from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel
+import os, logging, uuid
+from fastapi import Query, Response
+from sqlalchemy.exc import SQLAlchemyError
+
 
 
 @asynccontextmanager
@@ -37,6 +44,58 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CragCast API", version="0.1.0", lifespan=lifespan)
 
+
+log = logging.getLogger("api")
+DEBUG = os.getenv("DEBUG", "0") == "1"
+
+class ErrorOut(BaseModel):
+    ok: bool = False
+    code: int
+    message: str
+    detail: str | None = None
+    request_id: str
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["x-request-id"] = rid
+    return response
+
+@app.exception_handler(HTTPException)
+async def http_exc_handler(request: Request, exc: HTTPException):
+    rid = getattr(request.state, "request_id", "-")
+    detail = exc.detail if DEBUG else None
+    if exc.status_code >= 500:
+        log.exception("HTTP %s error: %s  rid=%s", exc.status_code, exc.detail, rid)
+    else:
+        log.warning("HTTP %s: %s  rid=%s", exc.status_code, exc.detail, rid)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ErrorOut(code=exc.status_code, message=str(exc.detail), detail=detail, request_id=rid).model_dump(),
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    rid = getattr(request.state, "request_id", "-")
+    msg = "Invalid request"
+    detail = exc.errors() if DEBUG else None
+    log.warning("422 validation: %s rid=%s", exc, rid)
+    return JSONResponse(
+        status_code=422,
+        content=ErrorOut(code=422, message=msg, detail=str(exc) if DEBUG else None, request_id=rid).model_dump(),
+    )
+
+@app.exception_handler(Exception)
+async def unhandled_handler(request: Request, exc: Exception):
+    rid = getattr(request.state, "request_id", "-")
+    log.exception("Unhandled error rid=%s", rid)
+    return JSONResponse(
+        status_code=500,
+        content=ErrorOut(code=500, message="Internal server error", detail=str(exc) if DEBUG else None, request_id=rid).model_dump(),
+    )
+
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 if origins:  
     app.add_middleware(
@@ -46,7 +105,7 @@ if origins:
         allow_headers=["*"],
         allow_credentials=True,
     )
-    
+
 _FORECAST_CACHE: dict[tuple[str, int, str], dict[str, object]] = {}
 
 def _ttl_get(key, ttl_s: int, loader):
@@ -278,7 +337,7 @@ def get_weather_for_coord(lat: float, lon: float):
 
 
 @app.get("/api/weather/crags/{crag_id}/forecast")
-def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168)):
+def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), response: Response = None):
     """Return the hourly forecast horizon for a crag.
 
     Args:
@@ -301,10 +360,15 @@ def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168)):
 
     def load():
         # Calls DB layer; returns a pandas DataFrame or empty DataFrame.
-        df = db.get_forecast(str(crag_id), hours=hours)
-        if df is None or df.empty:
+        try:
+            df = db.get_forecast(str(crag_id), hours=hours)
+        except SQLAlchemyError as e:
+            raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
+        except SQLAlchemyError as e:
+            raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
+        if df is None or getattr(df, "empty", False):
             # No data is a 404, not an empty success payload.
-            raise HTTPException(status_code=404, detail="No forecast available")
+            raise HTTPException(status_code=404, detail="No forecast for this crag")
         return df.to_dict(orient="records")
     
     return _ttl_get(key, ttl_s, load)
