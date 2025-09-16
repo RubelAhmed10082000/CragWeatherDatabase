@@ -675,6 +675,7 @@
 
     </style>
 </head>
+<meta name="api-base" content="{{ api_base_url or '' }}">
 <body>
     <div class="container">
         <div class="header">
@@ -926,6 +927,20 @@
 
     <script>
 (() => {
+
+  const API_BASE = document.querySelector('meta[name="api-base"]')?.content || '';
+
+async function getJSON(path, init) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    let body = '';
+    try { body = await res.text(); } catch {}
+    throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url} :: ${body}`);
+  }
+  return res.json();
+}
+
   // ---------------------------------------------------------------------------
   // Page-level constants and helpers
   // ---------------------------------------------------------------------------
@@ -1047,15 +1062,14 @@
    */
   async function fetchWeather(lat, lon, row){
     const cell = row.querySelector('.weather-data');
+    let raw;
     try {
-      const res = await fetch(`/api/weather/${lat}/${lon}`);
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.debug("weather fetch failed", res.status, body);
-        cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
-        return;
-      }
-      const raw = await res.json();
+      raw = await getJSON(`/api/weather/${lat}/${lon}`);
+    } catch (err) {
+      console.debug('weather fetch failed', err?.message || err);
+      cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
+      return;
+    }
       // Normalize to consistent keys used by renderWxCard()
       const w = {
         temperature_c: raw.temperature,
@@ -1327,7 +1341,7 @@
   let hoursWindow = 24;
 
   /** API path builder for forecast list. */
-  const ENDPOINT = (id, h = hoursWindow) => `/api/weather/crags/${id}/forecast?hours=${h}`;
+  const ENDPOINT = (id, h = hoursWindow) => `${API_BASE}/api/weather/crags/${id}/forecast?hours=${h}`;
 
   /** Thresholds for the quick chips. Tweak to tune sensitivity. */
   const TH = { dry_rain_mm_max: 0.0, wind_ms_max: 8 };
@@ -1347,9 +1361,7 @@
    * Returns an array sorted by timestamp, limited to `h` items.
    */
   async function fetchForecast(cragId, h = hoursWindow){
-    const res = await fetch(ENDPOINT(cragId, h));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = await getJSON(`/api/weather/crags/${cragId}/forecast?hours=${h}`);
     const list = Array.isArray(data) ? data : (data ? [data] : []);
     return list
       .map(dp => ({

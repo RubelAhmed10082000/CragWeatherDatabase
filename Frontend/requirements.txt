@@ -24,6 +24,7 @@ python-multipart>=0.0.6
 typing-extensions>=4.9.0 
 
 python-dotenv
+dotenv
 SQLAlchemy>=2.0
 psycopg[binary]>=3.1
 
