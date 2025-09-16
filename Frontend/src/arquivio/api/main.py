@@ -29,6 +29,7 @@ from pydantic import BaseModel
 import os, logging, uuid
 from fastapi import Query, Response
 from sqlalchemy.exc import SQLAlchemyError
+from uuid import UUID
 
 
 
@@ -337,7 +338,7 @@ def get_weather_for_coord(lat: float, lon: float):
 
 
 @app.get("/api/weather/crags/{crag_id}/forecast")
-def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), response: Response = None):
+def get_weather_history(crag_id: UUID, hours: int = Query(168, ge=1, le=168), response: Response = None):
     """Return the hourly forecast horizon for a crag.
 
     Args:
@@ -361,7 +362,7 @@ def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), res
     def load():
         # Calls DB layer; returns a pandas DataFrame or empty DataFrame.
         try:
-            df = db.get_forecast(str(crag_id), hours=hours)
+            df = db.get_forecast((crag_id), hours=hours)
         except SQLAlchemyError as e:
             raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
         except SQLAlchemyError as e:
