@@ -1,6 +1,6 @@
 # Web Framework
 fastapi>=0.109.0
-uvicorn>=0.27.0
+uvicorn[standard]>=0.27.0
 
 # Templates
 jinja2>=3.1.0
@@ -12,26 +12,29 @@ retry-requests>=2.0.0
 
 # Data Processing
 pandas>=2.2.0
-pyarrow>=15.0.0  # For efficient data transfer with DuckDB
+pyarrow>=15.0.0
 
 # HTTP Client
 httpx>=0.26.0
-
-# Static Files
 python-multipart>=0.0.6
 
-# Type Hints
-typing-extensions>=4.9.0 
+# Typing
+typing-extensions>=4.9.0
 
-python-dotenv
-dotenv
-SQLAlchemy>=2.0
-psycopg[binary]>=3.1
+# Env vars (keep this; remove old 'dotenv')
+python-dotenv>=1.0.0
 
+# Database stack (Cockroach + SQLAlchemy 2.x)
+SQLAlchemy>=2.0,<2.1
+sqlalchemy-cockroachdb>=2.0,<2.1
+psycopg2-binary==2.9.9
+
+# Test / tools
+pytest
+pytest-playwright
+beautifulsoup4
+ruff==0.6.9
+
+# Optional (only if you actually use it in this app)
 Flask
 typing
-pytest
-
-beautifulsoup4
-pytest-playwright
-ruff==0.6.9
