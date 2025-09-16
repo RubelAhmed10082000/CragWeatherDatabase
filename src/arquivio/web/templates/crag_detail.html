@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ crag.name }} - Climbing Crag Details</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --success-color: #22c55e;
+            --warning-color: #eab308;
+            --danger-color: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+      
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .crag-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .crag-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--primary-color);
+            text-decoration: none;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+
+        .back-link:hover {
+            color: var(--primary-hover);
+        }
+
+
+        .crag-header {
+            margin-bottom: 2rem;
+        }
+
+        .crag-header h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .crag-header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-item {
+            padding: 1rem;
+            background-color: var(--bg-color);
+            border-radius: 0.5rem;
+        }
+
+        .info-item-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .info-item-value {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .map-container {
+            height: 400px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .weather-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .weather-temp {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .weather-humidity {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .weather-precip {
+            background-color: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        .routes-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .route-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: block;
+        }
+
+        .route-item.hidden {
+            display: none;
+        }
+
+        .route-item:last-child {
+            border-bottom: none;
+        }
+
+        .route-name {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .grade {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: var(--bg-color);
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+        }
+
+        .route-info {
+            margin-top: 0.25rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .route-type, .route-difficulty {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            background-color: var(--bg-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .route-description {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+
+        .no-routes {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .routes-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .routes-per-page {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .routes-per-page select {
+            padding: 0.25rem 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            background-color: white;
+        }
+
+        .routes-search {
+            flex: 1;
+        }
+
+        .routes-search input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+
+        .routes-search input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .routes-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .pagination-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            background-color: white;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .pagination-btn:not(:disabled):hover {
+            background-color: var(--bg-color);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #pageInfo {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .wx { display:flex; flex-direction:column; align-items:flex-start; gap:.25rem; }
+        .wx-ic { width:32px; height:32px; }
+        .wx-summary { font-size:.85rem; color: var(--text-secondary); text-transform:capitalize; line-height:1.1; }
+        .wx-temp { font-weight:700; font-size:1rem; line-height:1.1; }
+        .wx-meta { display:flex; flex-direction:column; gap:.15rem; font-size:.78rem; color:var(--text-secondary); }
+
+        .wx-loading { color: var(--text-secondary); font-style: italic; padding:.25rem 0; }
+
+        .wx-days { display:flex; flex-direction:column; gap:1rem; }
+
+        .wx-day { display:flex; flex-direction:column; gap:.5rem; }
+
+        .wx-day-header {
+        position: sticky;
+        top: 0;          
+        background: var(--card-bg);
+        padding: .25rem 0;
+        font-weight: 600;
+        color: var(--text-primary);
+        z-index: 1;
+        border-bottom: 1px solid var(--border-color);
+        }
+
+        .wx-strip {
+        display:flex;
+        gap:.75rem;
+        overflow-x:auto;
+        padding-bottom: .25rem;
+        scroll-snap-type:x mandatory;
+        }
+
+        .wx-card {
+        min-width: 140px;            
+        max-width: 160px;
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+        border: 1px solid var(--border-color);
+        border-radius: .5rem;
+        padding: .5rem .75rem;
+        background: var(--bg-color);
+        }
+
+        .wx-card-time {
+        font-size:.8rem;
+        color: var(--text-secondary);
+        margin-bottom: .25rem;
+        }
+
+        .wx-strip-wrap {
+        position: relative;
+        }
+
+        .wx-nav {
+        position:absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 1px solid var(--border-color);
+        background: white;
+        border-radius: .5rem;
+        width: 32px;
+        height: 32px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        cursor: pointer;
+        opacity:.9;
+        }
+        .wx-nav:hover { background: var(--bg-color); }
+        .wx-prev { left: -8px; }
+        .wx-next { right: -8px; }
+
+        @media (max-width: 768px){
+        .wx-nav { display:none; }
+        }
+
+        .wx {
+        display: flex;
+        flex-direction: column;     
+        align-items: flex-start;
+        gap: .25rem;
+        }
+        .wx-ic { width: 32px; height: 32px; }
+
+        .wx-summary {
+        font-size: .85rem;
+        color: var(--text-secondary);
+        text-transform: capitalize;
+        line-height: 1.1;
+        }
+
+        .wx-temp {
+        font-weight: 700;
+        font-size: 1rem;
+        line-height: 1.1;
+        }
+
+        .wx-meta {
+        display: flex;
+        flex-direction: column;   
+        gap: .15rem;
+        font-size: .78rem;
+        color: var(--text-secondary);
+        }
+
+        :root{
+        --wx-card-h: 200px;  
+        --wx-head-h: 28px;  
+        --wx-gap: 10px;
+        }
+
+        .sidebar .card:first-child{
+        display: grid;
+        grid-template-rows: auto calc(var(--wx-head-h) + var(--wx-card-h));
+        overflow: hidden;                  
+        }
+
+      
+        .sidebar .card:first-child > h2.card-title{
+        grid-row: 1;
+        margin-bottom: 6px;
+        }
+
+        .sidebar .card:first-child > :not(h2.card-title){
+        grid-row: 2;
+        overflow-x: auto;                
+        overflow-y: hidden;
+        scrollbar-gutter: stable;        
+        padding-bottom: 4px;              
+        }
+
+        .sidebar .wx-scroller{ display:block; }
+
+        .sidebar .wx-head{
+        display: inline-flex;
+        flex-wrap: nowrap;
+        gap: var(--wx-gap);
+        margin-bottom: 2px;
+        }
+        .sidebar .wxh{
+        flex: 0 0 auto;
+        width: 115px;                      
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.2;
+        opacity: .8;
+        }
+
+        .sidebar .wx-strip{
+        display: inline-flex;
+        flex-wrap: nowrap;
+        gap: var(--wx-gap);
+        padding-bottom: 2px;
+        }
+
+        .sidebar .wx{
+        flex: 0 0 auto;
+        width: 115px;
+        height: var(--wx-card-h);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        }
+        .sidebar .wx-ic{ width: 40px; height: 40px; }
+        .sidebar .wx-summary{ font-size: 12px; line-height: 1.2; }
+        .sidebar .wx-temp{ margin: 2px 0; }
+        .sidebar .wx-meta{ font-size: 11px; display: flex; flex-direction: column; gap: 2px; }
+
+        .sidebar .wx-head { 
+        display:inline-flex; 
+        flex-wrap:nowrap; 
+        gap: var(--wx-gap); 
+        margin-bottom: 2px; 
+        border-bottom: 1px solid var(--border-color);
+        }
+        .sidebar .wxh {
+        flex:0 0 auto; 
+        width:115px;      
+        text-align:center; 
+        line-height:1.2;
+        }
+        .wxh-date { font-size:13px; font-weight:600; }
+        .wxh-time { font-size:11px; opacity:.8; }
+
+        :root{
+        --wx-card-h: 200px;
+        --wx-head-h: 28px;  
+        }
+        .sidebar .card:first-child{
+        display:grid;
+        grid-template-rows:auto calc(var(--wx-head-h) + var(--wx-card-h));
+        overflow:hidden;
+        }
+
+        .wx-range-bar {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: start;
+        justify-self: start;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin: 0;
+        }
+
+        .sidebar {
+        grid-column: 2;
+        grid-row: 1;
+        margin-top: 28px; 
+        }
+
+
+        @media (max-width: 768px) {
+        .main-content, .sidebar, .wx-range-bar {
+            grid-column: 1;
+            grid-row: auto;
+        }
+        }
+
+        .wx-chip{
+        border:1px solid var(--border-color);
+        background:white;
+        border-radius:999px;
+        padding:4px 10px;
+        font-size:12px;
+        cursor:pointer;
+        user-select:none;
+        }
+        .wx-chip:hover{ background:var(--bg-color); }
+        .wx-chip.active{
+        border-color: var(--primary-color);
+        background:#eef2ff;
+        font-weight:600;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+  
+        <a href="/" class="back-link">← Back to Crags List</a>
+
+        <div class="crag-header">
+            <h1 class="crag-title">{{ crag.crag_name | fmt }}</h1>
+        </div>
+        <div class="crag-grid">
+            <div class="main-content">
+                <div class="card">
+                    <h2 class="card-title">Location & Information</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-item-label">Rock Type</div>
+                            <div class="info-item-value">{{ crag.rocktype | fmt }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-item-label">County</div>
+                            <div class="info-item-value">{{ crag.county | fmt }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-item-label">Coordinates</div>
+                            <div class="info-item-value">{{ crag.latitude }}, {{ crag.longitude }}</div>
+                        </div>
+                    </div>
+
+                    <h3 class="card-title">Location Map</h3>
+                    <div id="map" class="map-container"></div>
+
+                    {% if crag.description %}
+                    <h3 class="card-title">About this Crag</h3>
+                    <p>{{ crag.description }}</p>
+                    {% endif %}
+                </div>
+
+                {% if crag.routes %}
+                <div class="card" style="margin-top: 2rem;">
+                    <h2 class="card-title">Routes ({{ crag.routes|length }})</h2>
+                    <div class="routes-controls">
+                        <div class="routes-per-page">
+                            <label for="routesPerPage">Routes per page:</label>
+                            <select id="routesPerPage">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="routes-search">
+                            <input type="text" id="routeSearch" placeholder="Search routes...">
+                        </div>
+                    </div>
+                    <ul class="routes-list" id="routesList">
+                        {% for route in crag.routes %}
+                        <li class="route-item">
+                        <div class="route-name">
+                            {{ route.get('name') or route.get('route_name') or 'Unnamed route' }}
+
+                            {# difficulty always shown #}
+                            <span class="grade">
+                            {{ (route.get('difficulty') or route.get('grade') or route.get('difficulty')) | fmt }}
+                            </span>
+
+                            {# safety only when present; different class #}
+                            {% if route.get('safety') %}
+                            <span class="grade">{{ route.get('safety') | upper }}</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="route-info">
+                            {% if route.get('type') %}
+                            <span class="route-type">{{ route.get('type') }}</span>
+                            {% endif %}
+                        </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <div class="routes-pagination">
+                        <button id="prevPage" class="pagination-btn" disabled>&larr; Previous</button>
+                        <span id="pageInfo">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></span>
+                        <button id="nextPage" class="pagination-btn" disabled>Next &rarr;</button>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card" style="margin-top: 2rem;">
+                    <h2 class="card-title">Routes</h2>
+                    <p class="no-routes">No routes available for this crag.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="wx-range-bar" aria-label="Forecast range">
+                <button class="wx-chip active" data-hours="24" data-testid="chip-24">24h</button>
+                <button class="wx-chip" data-hours="48" data-testid="chip-48">48h</button>
+                <button class="wx-chip" data-hours="72" data-testid="chip-72">72h</button>
+                <button class="wx-chip" data-hours="168" data-testid="chip-168">7-Days</button>
+            </div>
+
+            <div class="sidebar">
+                <div class="card">
+                <h2 class="card-title">Hourly Weather (7 days)</h2>
+
+                <div id="wxDays" class="wx-days">
+                    <div class="wx-loading">Loading forecast…</div>
+                </div>
+            </div>
+
+                {% if crag.access %}
+                <div class="card" style="margin-top: 2rem;">
+                    <h2 class="card-title">Access Information</h2>
+                    <p>{{ crag.access }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+<script>
+/* -----------------------------------------------------------------------------
+ * Map initialisation (Leaflet)
+ * - Defensive: only runs if #map exists and Leaflet loaded.
+ * - Uses server-rendered lat/lon to center and place a marker.
+ * ---------------------------------------------------------------------------*/
+try {
+  const mapEl = document.getElementById('map');
+  const hasLeaflet =
+    typeof window !== 'undefined' && window.L && typeof L.map === 'function';
+
+  if (mapEl && hasLeaflet) {
+    const map = L.map(mapEl).setView(
+      [{{ crag.latitude|tojson }}, {{ crag.longitude|tojson }}],
+      13
+    );
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    L.marker([{{ crag.latitude|tojson }}, {{ crag.longitude|tojson }}])
+      .addTo(map)
+      .bindPopup({{ crag.crag_name|tojson }});
+  } else {
+    console.warn('Map init skipped (Leaflet or #map not available).');
+  }
+} catch (err) {
+  console.warn('Map init error (skipped):', err);
+}
+
+/* -----------------------------------------------------------------------------
+ * Server-provided page context
+ * - Values are JSON-escaped by Jinja to avoid script injection.
+ * ---------------------------------------------------------------------------*/
+const CRAG_ID = {{ (crag.crag_id or crag.id)|tojson }};
+const LAT = {{ crag.latitude|tojson }};
+const LON = {{ crag.longitude|tojson }};
+
+/* -----------------------------------------------------------------------------
+ * Weather icon config
+ * - ICON_BASE points to Flask static icons.
+ * - VC_ICON_MAP maps simple condition keys -> file + human label.
+ * ---------------------------------------------------------------------------*/
+const ICON_BASE = "{{ url_for('static', filename='icons') }}";
+const VC_ICON_MAP = {
+  "clear-day":       { file: "clear-day.png",       label: "Sunny" },
+  "clear-night":     { file: "clear-night.png",     label: "Clear Night" },
+  "partly-cloudy-day": { file: "partly-cloudy-day.png", label: "Partly Cloudy" },
+  "cloudy":          { file: "cloudy.png",          label: "Cloudy" },
+  "fog":             { file: "fog.png",             label: "Fog" },
+  "wind":            { file: "wind.png",            label: "Windy" },
+  "rain":            { file: "rain.png",            label: "Rain" },
+  "snow":            { file: "snow.png",            label: "Snow" }
+};
+/** Precip shown as snow when temp ≤ this °C. */
+const SNOW_THRESHOLD_C = 0.5;
+
+/* -----------------------------------------------------------------------------
+ * Small helpers (nullish checks + key pickers)
+ * - pickNum/pickStr scan a list of possible keys to normalize upstream shapes.
+ * ---------------------------------------------------------------------------*/
+const isNil = v => v === null || v === undefined || v === "";
+const toNum = v => (isNil(v) ? null : Number(v));
+
+/** Pick first present numeric key from `keys`, else null. */
+function pickNum(obj, keys){
+  for (const k of keys){
+    if (Object.prototype.hasOwnProperty.call(obj, k) && !isNil(obj[k])) return toNum(obj[k]);
+  }
+  return null;
+}
+
+/** Pick first present string-like key from `keys`, else null. */
+function pickStr(obj, keys){
+  for (const k of keys){
+    if (Object.prototype.hasOwnProperty.call(obj, k) && !isNil(obj[k])) return String(obj[k]);
+  }
+  return null;
+}
+
+/* -----------------------------------------------------------------------------
+ * Icon selection for an hourly datapoint
+ * - Uses precip, temp, humidity, wind, and day/night heuristic.
+ * - `tsIso` lets us determine night vs day from the datapoint’s timestamp.
+ * ---------------------------------------------------------------------------*/
+function pickIconForHour(w, tsIso) {
+  const tC = toNum(w.temperature_c);
+  const pr = toNum(w.precipitation_mm);
+  const rh = toNum(w.relative_humidity_percentage);
+  const ms = toNum(w.windspeed_ms);
+
+  const hour = tsIso ? new Date(tsIso).getHours() : new Date().getHours();
+  const isNight = hour >= 20 || hour < 6;
+
+  if (tC != null && tC <= SNOW_THRESHOLD_C && pr > 0) return VC_ICON_MAP.snow;
+
+  if (pr != null && pr > 0) {
+    if (pr < 1) return { file: "rain.png", label: "Light Rain" };
+    if (pr < 4) return { file: "rain.png", label: "Rain" };
+    return { file: "rain.png", label: "Heavy Rain" };
+  }
+
+  if (rh != null && rh >= 98 && ms != null && ms <= 2) return VC_ICON_MAP.fog;
+  if (ms != null && ms >= 10) return VC_ICON_MAP.wind;
+
+  return isNight ? VC_ICON_MAP["clear-night"] : VC_ICON_MAP["clear-day"];
+}
+
+/* -----------------------------------------------------------------------------
+ * UI rendering: one hourly “card”
+ * - Accepts a normalized datapoint (keys: timestamp, temperature_c, etc.).
+ * - Converts wind m/s -> km/h for readability.
+ * ---------------------------------------------------------------------------*/
+function renderHourCard(dp) {
+  const tC = dp.temperature_c;
+  const pr = dp.precipitation_mm;
+  const ms = dp.windspeed_ms;
+  const rh = dp.relative_humidity_percentage;
+
+  const chosen = pickIconForHour(
+    { temperature_c: tC, precipitation_mm: pr, windspeed_ms: ms, relative_humidity_percentage: rh },
+    dp.timestamp
+  );
+
+  const kmh = ms != null ? Math.round(ms * 3.6) : null;
+  const prFmt = pr != null ? Math.round(pr * 10) / 10 : null;
+
+  return `
+    <div class="wx">
+      <img class="wx-ic" src="${ICON_BASE}/${chosen.file}" alt="${chosen.label}">
+      <div class="wx-summary">${chosen.label}</div>
+      <div class="wx-temp"><strong>${tC != null ? Math.round(tC) + "°C" : "N/A"}</strong></div>
+      <div class="wx-meta">
+        <span>Wind: ${kmh != null ? kmh + " km/h" : "N/A"}</span>
+        <span>Rain: ${prFmt != null ? prFmt + " mm" : "N/A"}</span>
+        <span>Hum: ${rh != null ? Math.round(rh) + "%" : "N/A"}</span>
+      </div>
+    </div>
+  `;
+}
+
+/* -----------------------------------------------------------------------------
+ * UI rendering: compact header above each card (date + hour HH:00)
+ * ---------------------------------------------------------------------------*/
+function renderHourHeader(dp) {
+  const ts = new Date(dp.timestamp);
+  const dateLabel = ts.toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short'
+  });
+  const hh = ts.getHours().toString().padStart(2, '0') + ':00';
+
+  return `
+    <div class="wxh">
+      <div class="wxh-date">${dateLabel}</div>
+      <div class="wxh-time">${hh}</div>
+    </div>
+  `;
+}
+
+/* -----------------------------------------------------------------------------
+ * Fetch + render forecast into the right-hand sidebar
+ * - Primary: GET /api/weather/crags/{CRAG_ID}/forecast?hours=X
+ * - Fallback: if empty, GET /api/weather/{LAT}/{LON} (single current point)
+ * - Normalizes mixed payload shapes to a consistent set of keys.
+ * ---------------------------------------------------------------------------*/
+async function loadForecastIntoSidebar(hours = 24) {
+  const card = document.querySelector('.sidebar .card');
+  if (!card) return;
+
+  // Lightweight skeleton while loading.
+  card.innerHTML = `
+    <h2 class="card-title">Hourly Weather</h2>
+    <div class="wx-scroller"><div class="wx-strip">Loading…</div></div>
+  `;
+
+  try {
+    let list = [];
+    // Primary: forecast horizon by crag id
+    const res = await fetch(`/api/weather/crags/${CRAG_ID}/forecast?hours=${hours}`);
+    if (res.ok) {
+      const data = await res.json();
+      list = Array.isArray(data) ? data : (data ? [data] : []);
+    }
+
+    // Fallback: current/next point by coordinates if forecast empty
+    if (!list.length) {
+      const res2 = await fetch(`/api/weather/${LAT}/${LON}`);
+      if (res2.ok) {
+        const now = await res2.json();
+        if (now && (now.timestamp || now.time || now.date)) list = [now];
+      }
+    }
+
+    // Normalize heterogeneous shapes to a consistent structure
+    const normalized = list
+      .filter(Boolean)
+      .map(dp => ({
+        timestamp: pickStr(dp, ["timestamp","time","ts","date","datetime"]),
+        temperature_c: pickNum(dp, ["temperature_c","temperature","temp_c","temp","temperature_2m"]),
+        precipitation_mm: pickNum(dp, ["precipitation_mm","precipitation","precip_mm","precip","rain_mm","rain"]),
+        windspeed_ms: pickNum(dp, ["windspeed_ms","wind_speed_ms","wind_ms","wind_speed","wind"]),
+        relative_humidity_percentage: pickNum(dp, ["relative_humidity_percentage","relative_humidity","humidity","rh"])
+      }))
+      .filter(dp => dp.timestamp)
+      .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .slice(0, hours);
+
+    if (!normalized.length) throw new Error('empty forecast');
+
+    // Render headers + cards in parallel strips
+    const headers = normalized.map(renderHourHeader).join("");
+    const cards   = normalized.map(renderHourCard).join("");
+
+    card.querySelector('.wx-scroller').innerHTML = `
+      <div id="wx-head" class="wx-head">${headers}</div>
+      <div id="wx-cards" class="wx-strip">${cards}</div>
+    `;
+  } catch (err) {
+    console.error('Forecast error:', err);
+    card.querySelector('.wx-scroller').innerHTML = `
+      <div class="wx-strip">
+        <div class="wx"><div class="wx-summary">Forecast unavailable</div></div>
+      </div>`;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * Boot: load default (24h) and wire hour-range chips
+ * - Clicking a chip switches the active state and reloads the forecast.
+ * ---------------------------------------------------------------------------*/
+document.addEventListener('DOMContentLoaded', () => {
+  loadForecastIntoSidebar(24);
+
+  const bar = document.querySelector('.wx-range-bar');
+  if (!bar) return;
+
+  bar.addEventListener('click', (e) => {
+    const btn = e.target.closest('.wx-chip');
+    if (!btn) return;
+
+    bar.querySelectorAll('.wx-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const hours = parseInt(btn.dataset.hours, 10);
+    if (Number.isInteger(hours)) loadForecastIntoSidebar(hours);
+  });
+});
+</script>
+</body>
+</html> 
