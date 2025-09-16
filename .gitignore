@@ -24,6 +24,8 @@ venv/
 
 vscode/
 
+.vscode
+
 data/
 
 jobs_*
