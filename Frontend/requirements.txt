@@ -38,3 +38,4 @@ ruff==0.6.9
 # Optional (only if you actually use it in this app)
 Flask
 typing
+docker
