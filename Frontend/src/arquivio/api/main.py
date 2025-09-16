@@ -36,13 +36,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CragCast API", version="0.1.0", lifespan=lifespan)
 
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5000").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in origins if o.strip()],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+if origins:  
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=True,
+    )
 
 
 @app.get("/debug/db")
