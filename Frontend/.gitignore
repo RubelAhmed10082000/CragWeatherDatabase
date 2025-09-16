@@ -12,6 +12,7 @@ venv/
 .vscode
 pytest.ini
 .venv
+.env.local
 
 .vscode/
 **/.vscode/
