@@ -18,6 +18,7 @@ config/
 Working_Code/__pycache__/
 
 .cache.sqlite
+.venv/
 
 .env
 
