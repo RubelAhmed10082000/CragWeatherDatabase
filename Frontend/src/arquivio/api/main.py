@@ -28,7 +28,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 import os, logging, uuid
 from fastapi import Query, Response
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, DataError
 from uuid import UUID
 
 
@@ -97,8 +97,15 @@ async def unhandled_handler(request: Request, exc: Exception):
         content=ErrorOut(code=500, message="Internal server error", detail=str(exc) if DEBUG else None, request_id=rid).model_dump(),
     )
 
-origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-if origins:  
+def _parse_origins(value: str | None) -> list[str]:
+    return [o.strip().rstrip('/') for o in (value or "").split(",") if o.strip()]
+
+origins = _parse_origins(os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5000,http://127.0.0.1:5000"  
+))
+
+if origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -338,7 +345,7 @@ def get_weather_for_coord(lat: float, lon: float):
 
 
 @app.get("/api/weather/crags/{crag_id}/forecast")
-def get_weather_history(crag_id: UUID, hours: int = Query(168, ge=1, le=168), response: Response = None):
+def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), response: Response = None):
     """Return the hourly forecast horizon for a crag.
 
     Args:
@@ -362,7 +369,9 @@ def get_weather_history(crag_id: UUID, hours: int = Query(168, ge=1, le=168), re
     def load():
         # Calls DB layer; returns a pandas DataFrame or empty DataFrame.
         try:
-            df = db.get_forecast((crag_id), hours=hours)
+            df = db.get_forecast(crag_id, hours=hours)
+        except DataError:
+            raise HTTPException(status_code=404, detail="No forecast for this crag")
         except SQLAlchemyError as e:
             raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
         except SQLAlchemyError as e:
