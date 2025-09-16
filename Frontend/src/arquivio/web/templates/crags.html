@@ -1061,15 +1061,15 @@ async function getJSON(path, init) {
    * Falls back to a soft "unavailable" message if anything goes wrong.
    */
   async function fetchWeather(lat, lon, row){
-    const cell = row.querySelector('.weather-data');
-    let raw;
-    try {
-      raw = await getJSON(`/api/weather/${lat}/${lon}`);
-    } catch (err) {
-      console.debug('weather fetch failed', err?.message || err);
-      cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
-      return;
-    }
+  const cell = row.querySelector('.weather-data');
+  let raw;
+  try {
+    raw = await getJSON(`/api/weather/${lat}/${lon}`);
+  } catch (err) {
+    console.debug('weather fetch failed', err?.message || err);
+    cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
+    return;
+  }
       // Normalize to consistent keys used by renderWxCard()
       const w = {
         temperature_c: raw.temperature,
@@ -1078,10 +1078,6 @@ async function getJSON(path, init) {
         windspeed_ms: raw.wind
       };
       cell.innerHTML = renderWxCard(w);
-    } catch (e) {
-      console.error('Error fetching weather:', e);
-      cell.innerHTML = '<div class="wx wx-summary">Weather data unavailable</div>';
-    }
   }
 
   // Lazy-load weather cells when rows enter viewport to avoid hammering the API.
