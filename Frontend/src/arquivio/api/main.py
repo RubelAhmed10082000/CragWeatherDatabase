@@ -29,8 +29,9 @@ from pydantic import BaseModel
 import os, logging, uuid
 from fastapi import Query, Response
 from sqlalchemy.exc import SQLAlchemyError, DataError
-from uuid import UUID
-
+import time
+from fastapi import Request
+from fastapi.responses import Response
 
 
 @asynccontextmanager
@@ -46,6 +47,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CragCast API", version="0.1.0", lifespan=lifespan)
 
 
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine.Engine").setLevel(logging.WARNING)
+                                                       
 log = logging.getLogger("api")
 DEBUG = os.getenv("DEBUG", "0") == "1"
 
@@ -55,6 +66,23 @@ class ErrorOut(BaseModel):
     message: str
     detail: str | None = None
     request_id: str
+
+log = logging.getLogger("api")
+
+@app.middleware("http")
+async def timing(request: Request, call_next):
+    t0 = time.perf_counter()
+    resp: Response = await call_next(request)
+    ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    # if you added request IDs earlier:
+    rid = getattr(request.state, "request_id", "-")
+
+    log.info(
+        "method=%s path=%s status=%s ms=%.1f rid=%s",
+        request.method, request.url.path, resp.status_code, ms, rid
+    )
+    return resp
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
@@ -386,7 +414,9 @@ def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), res
             raise HTTPException(status_code=404, detail="No forecast for this crag")
         return df.to_dict(orient="records")
     
-    return _ttl_get(key, ttl_s, load)
+    val = _ttl_get(key, ttl_s, load)
+    log.info("forecast crag=%s hours=%s rows=%s cache=%s", crag_id, hours, len(val), "hit" if key in _FORECAST_CACHE else "miss")
+    return val
 
 
 
