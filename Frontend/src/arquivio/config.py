@@ -12,15 +12,10 @@ if not IN_CLOUD_RUN and ENV == "development":
         pass
 
 def get_database_url() -> str:
-    dsn = (
-        os.getenv("DATABASE_URL") if ENV == "production"
-        else os.getenv("DEV_DATABASE_URL") or os.getenv("DATABASE_URL", "")
-    )
+    if ENV == "production":
+        dsn = os.getenv("DATABASE_URL", "")
+    else:
+        dsn = os.getenv("DEV_DATABASE_URL", "")
     if not dsn:
         raise RuntimeError("No database URL configured")
-
-    if ENV == "production":
-        u = urlparse(dsn)
-        if u.hostname in {"localhost", "127.0.0.1"} or "sslmode=disable" in dsn:
-            raise RuntimeError(f"Refusing to start with invalid prod DSN: {dsn!r}")
     return dsn

@@ -10,12 +10,10 @@ frontend via WSGI. Cockroach DB CragWeatherDatabase represented as db
         Control back to FastAPI to run the application
 """
 
-import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from starlette.middleware.wsgi import WSGIMiddleware
 from arquivio.web.app import app as flask_app
 from .services.cockroach import db
@@ -26,7 +24,7 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
-import os, logging, uuid
+import logging, uuid
 from fastapi import Query, Response
 from sqlalchemy.exc import SQLAlchemyError, DataError
 import time
@@ -75,6 +73,14 @@ class ErrorOut(BaseModel):
 log = logging.getLogger("api")
 
 @app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["x-request-id"] = rid
+    return response
+
+@app.middleware("http")
 async def timing(request: Request, call_next):
     t0 = time.perf_counter()
     resp: Response = await call_next(request)
@@ -89,13 +95,7 @@ async def timing(request: Request, call_next):
     )
     return resp
 
-@app.middleware("http")
-async def add_request_id(request: Request, call_next):
-    rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
-    request.state.request_id = rid
-    response = await call_next(request)
-    response.headers["x-request-id"] = rid
-    return response
+
 
 @app.exception_handler(HTTPException)
 async def http_exc_handler(request: Request, exc: HTTPException):
@@ -336,7 +336,7 @@ def get_weather_for_coord(lat: float, lon: float):
 
 
 @app.get("/api/weather/crags/{crag_id}/forecast")
-def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), response: Response = None):
+def get_forecast(crag_id: str, hours: int = Query(168, ge=1, le=168), response: Response = None):
     """Return the hourly forecast horizon for a crag.
 
     Args:
