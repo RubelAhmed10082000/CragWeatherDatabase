@@ -33,7 +33,6 @@ import time
 from fastapi import Request
 from fastapi.responses import Response
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if os.getenv("SANITY_MODE") != "1":
@@ -43,8 +42,12 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
-
 app = FastAPI(title="CragCast API", version="0.1.0", lifespan=lifespan)
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+app.mount("/", WSGIMiddleware(flask_app))
 
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -184,11 +187,6 @@ def db_debug():
 @app.get("/api")
 def root():
     return {"service": "CragCast API", "status": "ok"}
-
-
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    return {"status": "ok"}
 
 
 @app.get("/api/crags/facets")
@@ -421,4 +419,3 @@ def get_weather_history(crag_id: str, hours: int = Query(168, ge=1, le=168), res
 
 
 
-app.mount("/", WSGIMiddleware(flask_app))

@@ -1,4 +1,3 @@
-# api.Dockerfile
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -9,13 +8,15 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/arquivio/api/ /app/src/arquivio/api/
+COPY src/ /app/src/
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8080
 ENV PORT=8080
 
-CMD ["uvicorn", "src.arquivio.api.main:app", "--host=0.0.0.0", "--port=8080", "--workers=2"]
+CMD ["uvicorn", "arquivio.api.main:app", "--host=0.0.0.0", "--port=8080", "--workers=2"]
+
+
 
 
