@@ -25,6 +25,8 @@ def create_app() -> Flask:
     def index():
         # Minimal root to prove liveness from the Flask side
         return jsonify({"status": "ok", "service": "flask-frontend"})
+    
+    return app
 
 # WSGI entrypoint for Gunicorn / local dev
 app = create_app()

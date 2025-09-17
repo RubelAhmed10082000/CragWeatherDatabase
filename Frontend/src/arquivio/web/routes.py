@@ -65,7 +65,6 @@ def crags_page():
         "county": _get_list("county"),
     }
 
-    # Facets (no HTTP)
     try:
         facets = get_crag_facets_core(db)
         if isinstance(facets, list):
@@ -78,7 +77,6 @@ def crags_page():
     if filters_present and page > 1 and via != "pager":
         page = 1
 
-    # First fetch (no HTTP)
     data = list_crags_core(
         q=q,
         county=sel["county"],
