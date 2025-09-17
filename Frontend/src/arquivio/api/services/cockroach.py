@@ -11,6 +11,7 @@ from typing import Any
 from arquivio.core.crdb import get_crdb_version_tuple
 import pandas as pd
 from sqlalchemy import bindparam, create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
@@ -50,22 +51,34 @@ class CragDatabase:
             DatabaseError: if the DSN is missing or initial connect fails.
         """
         if self._engine is None:
-            dsn = os.getenv("DATABASE_URL")
-            if not dsn:
-                raise DatabaseError("DATABASE_URL not set. Set it in .env or the environment.")
-            # `future=True` -> 2.0-style engine/Connection behavior.
-            eng = create_engine(dsn, pool_size=5, max_overflow=5, pool_pre_ping=True, future=True)
+            raw = os.environ("DATABASE_URL","") 
+            if not raw:
+                raise DatabaseError("DATABASE_URL not set")
+            url = make_url(raw)
+            if url.drivername.startswith(("postgresql", "postgresql+psycopg2")):
+                url = url.set(drivername="cockroachdb+psycopg2")
+                in_cloud_run = bool(os.getenv("K_SERVICE"))
+                if in_cloud_run:
+                    host = url.host or ""
+                    if host in {"localhost", "127.0.0.1"} or "sslmode=disable" in str(url):
+                        raise DatabaseError(f"Refusing to start with invalid prod DSN (host={host})")
+            eng = create_engine(url, pool_pre_ping=True, future=True)
 
-            # Fail fast unless explicitly disabled (useful in local dev/test).
+            version_tuple = None
             if os.getenv("SANITY_MODE") != "1":
                 with eng.connect() as c:
                     c.execute(text("SELECT 1"))
                 with eng.connect() as c:
-                    major, minor, patch = get_crdb_version_tuple(c)
-                    if (major, minor) < (23, 1): raise RuntimeError("CockroachDB >= 23.1 required")
-            logger.info("Connected to CockroachDB (v%s.%s.%s)", major, minor, patch)
-
+                    version_tuple = get_crdb_version_tuple(c) 
+                    if version_tuple[:2] < (23, 1):
+                        raise RuntimeError("CockroachDB >= 23.1 required")
+            if version_tuple:
+                logger.info("Connected to CockroachDB (v%s.%s.%s)", *version_tuple)
+            else:
+                logger.info("Connected to CockroachDB (version check skipped: SANITY_MODE=1)")
+ 
             self._engine = eng
+
         return self._engine
 
     def close(self) -> None:
@@ -76,11 +89,6 @@ class CragDatabase:
                 self._engine = None
         except Exception as e:
             logger.warning(f"Error closing database connection: {e}")
-
-    T_CRAGS = "dimcrags"
-    T_ROUTES = "dimroutes"
-    T_FACT = "fact_crag_hourly_weather"
-    T_LAST_RAIN = "crag_last_rain_state"
 
     def _df(self, rows: list[dict]) -> pd.DataFrame:
         """Build a DataFrame from a list of dict rows, empty if no rows."""
