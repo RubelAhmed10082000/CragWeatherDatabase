@@ -8,7 +8,7 @@ import logging
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
-
+from arquivio.core.crdb import get_crdb_version_tuple
 import pandas as pd
 from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.engine import Engine
@@ -60,7 +60,10 @@ class CragDatabase:
             if os.getenv("SANITY_MODE") != "1":
                 with eng.connect() as c:
                     c.execute(text("SELECT 1"))
-                logger.info("Connected to CockroachDB")
+                with eng.connect() as c:
+                    major, minor, patch = get_crdb_version_tuple(c)
+                    if (major, minor) < (23, 1): raise RuntimeError("CockroachDB >= 23.1 required")
+            logger.info("Connected to CockroachDB (v%s.%s.%s)", major, minor, patch)
 
             self._engine = eng
         return self._engine
