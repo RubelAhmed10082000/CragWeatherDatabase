@@ -47,8 +47,7 @@ app = FastAPI(title="CragCast API", version="0.1.0", lifespan=lifespan)
 async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
-app.mount("/", WSGIMiddleware(flask_app))
-
+app.mount("/web", WSGIMiddleware(flask_app))
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 

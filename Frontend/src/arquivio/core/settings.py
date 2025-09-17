@@ -16,6 +16,6 @@ def _parse_origins(value: str | None) -> list[str]:
 
 
 settings = Settings(
-    DATABASE_URL=os.environ["DATABASE_URL"],
+    DATABASE_URL=os.environ.get["DATABASE_URL"],
     CORS_ORIGINS=_parse_origins(os.environ.get("CORS_ORIGINS")),
 )

@@ -51,7 +51,7 @@ class CragDatabase:
             DatabaseError: if the DSN is missing or initial connect fails.
         """
         if self._engine is None:
-            raw = os.environ("DATABASE_URL","") 
+            raw = os.getenv("DATABASE_URL","") 
             if not raw:
                 raise DatabaseError("DATABASE_URL not set")
             url = make_url(raw)
