@@ -34,7 +34,6 @@ app.config["API_BASE_URL"] = os.getenv(
              INTERNAL_DEFAULT)  
 )
 
-app.config["API_BASE_URL"] = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 app.config["DEFAULT_ITEMS_PER_PAGE"] = int(os.getenv("DEFAULT_ITEMS_PER_PAGE", "25"))
 app.config["PER_PAGE_MAX"] = int(
     os.getenv("PER_PAGE_MAX", str(app.config["DEFAULT_ITEMS_PER_PAGE"]))
