@@ -335,12 +335,16 @@ def get_weather_for_coord(lat: float, lon: float):
 
 
 @app.get("/api/weather/crags/{crag_id}/forecast")
-def get_forecast(crag_id: str, hours: int = Query(168, ge=1, le=168), response: Response = None):
+def get_forecast(
+    crag_id: str,
+    hours: int = Query(168, ge=1, le=10000), 
+    response: Response = None,
+):
     """Return the hourly forecast horizon for a crag.
 
     Args:
         crag_id: The crag identifier.
-        hours: Number of future hours to return (1–168).
+        hours: Number of future hours to return (client hint; will be clamped).
 
     Returns:
         A list of hourly forecast records (dicts), suitable for charting.
@@ -349,35 +353,36 @@ def get_forecast(crag_id: str, hours: int = Query(168, ge=1, le=168), response: 
         HTTPException: 404 if no forecast data is available.
     """
     orig = hours
-    
+
     cap = int(os.getenv("FORECAST_MAX_HOURS", "168"))
     hours = min(hours, cap)
     if os.getenv("RU_DEGRADE_24H", "0") == "1":
         hours = min(hours, 24)
+
     if response is not None and hours != orig:
         response.headers["x-clamped-hours"] = str(hours)
 
-    ttl_s = int(os.getenv("FORECAST_TTL_S", "600"))          
-    buster = os.getenv("FORECAST_CACHE_BUSTER", "")         
+    ttl_s = int(os.getenv("FORECAST_TTL_S", "600"))
+    buster = os.getenv("FORECAST_CACHE_BUSTER", "")
     key = (str(crag_id), int(hours), buster)
 
     def load():
-        # Calls DB layer; returns a pandas DataFrame or empty DataFrame.
         try:
             df = db.get_forecast(crag_id, hours=hours)
         except DataError:
             raise HTTPException(status_code=404, detail="No forecast for this crag")
         except SQLAlchemyError as e:
             raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
-        except SQLAlchemyError as e:
-            raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
+
         if df is None or getattr(df, "empty", False):
-            # No data is a 404, not an empty success payload.
             raise HTTPException(status_code=404, detail="No forecast for this crag")
         return df.to_dict(orient="records")
-    
+
     val = _ttl_get(key, ttl_s, load)
-    log.info("forecast crag=%s hours=%s rows=%s cache=%s", crag_id, hours, len(val), "hit" if key in _FORECAST_CACHE else "miss")
+    log.info(
+        "forecast crag=%s hours=%s rows=%s cache=%s",
+        crag_id, hours, len(val), "hit" if key in _FORECAST_CACHE else "miss"
+    )
     return val
 
 
