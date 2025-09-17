@@ -41,3 +41,5 @@ ruff==0.6.9
 Flask
 typing
 docker
+starlette
+
