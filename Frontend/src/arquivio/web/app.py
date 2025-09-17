@@ -24,6 +24,16 @@ BASE = Path(__file__).resolve().parent
 
 # Core Flask app + basic config. Keep defaults conservative for local dev.
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+PORT = os.getenv("PORT", "8080")
+INTERNAL_DEFAULT = f"http://127.0.0.1:{PORT}"
+
+app.config["API_BASE_URL"] = os.getenv(
+    "API_BASE_URL",           
+    os.getenv("INTERNAL_BASE",  
+             INTERNAL_DEFAULT)  
+)
+
 app.config["API_BASE_URL"] = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 app.config["DEFAULT_ITEMS_PER_PAGE"] = int(os.getenv("DEFAULT_ITEMS_PER_PAGE", "25"))
 app.config["PER_PAGE_MAX"] = int(
