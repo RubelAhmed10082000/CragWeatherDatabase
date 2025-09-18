@@ -152,3 +152,13 @@ def weather_proxy(crag_id: str):
     except RequestException:
         current_app.logger.exception("weather fetch failed")
         return jsonify([]), 200
+    
+@web.get("/api/weather/<lat>/<lon>")
+def weather_proxy_latlon(lat: str, lon: str):
+    hours = _int_arg("hours", 24, 1, 168)
+    try:
+        data = get_json(f"api/weather/{lat}/{lon}", params={"hours": hours})
+        return jsonify(data)
+    except RequestException:
+        current_app.logger.exception("weather latlon proxy failed")
+        return jsonify([]), 200
