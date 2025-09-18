@@ -1,196 +1,121 @@
-"""Flask web routes for CragCast.
-
-Renders the index and detail pages, and provides a small proxy for the API's
-weather endpoint (used by front-end JS). The actual data comes from the FastAPI
-backend configured via `API_BASE_URL` in Flask app config.
-"""
-from arquivio.core.crags import list_crags_core, get_crag_facets_core
+# src/arquivio/web/routes.py
+from __future__ import annotations
 import math
-from pathlib import Path
-from arquivio.api.services.cockroach import db
-import requests
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
+from flask import Blueprint, current_app, render_template, request, abort, jsonify, flash
+from lib.http import get_json 
 
-HERE = Path(__file__).resolve().parent
-web = Blueprint("web", __name__, template_folder=str(HERE / "templates"))
+web = Blueprint("web", __name__, template_folder="templates", static_folder="static")
 
-
-def _to_int(val, default: int) -> int:
-    """Parse `val` to int, returning `default` on TypeError/ValueError."""
+def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
     try:
-        return int(val)
+        v = int(request.args.get(name, default))
     except (TypeError, ValueError):
-        return default
+        v = default
+    return max(lo, min(hi, v))
 
+def _str_arg(name: str) -> str | None:
+    v = request.args.get(name)
+    return v if v else None
 
-def _clamp(n: int, lo: int, hi: int) -> int:
-    """Clamp integer `n` to the inclusive range [lo, hi]."""
-    return max(lo, min(n, hi))
+def _list_arg(name: str) -> list[str] | None:
+    vals = [v for v in request.args.getlist(name) if v]
+    return vals or None
 
-
-def _get_list(name: str) -> list[str]:
-    """Return a cleaned list of query-arg values for `name` (drop blanks/None)."""
-    vals = request.args.getlist(name)
-    return [v for v in vals if v is not None and str(v).strip() != ""]
-
-
-@web.route("/")
+@web.get("/")
 def crags_page():
-    """Index page: search, filter, sort, and paginate crags.
+    page = _int_arg("page", 1, 1, 1_000_000)
+    per_page = _int_arg("per_page", 25, 1, 100)
+    sort_by = request.args.get("sort_by") or "name"
+    sort_order = request.args.get("sort_order") or "asc"
 
-    Reads query args, calls the API (`/api/crags` and `/api/crags/facets`), and
-    renders `crags.html`. If filters change and the user isn't coming "via" the
-    pager, resets to page 1 to avoid empty slices.
-    """
-    DEFAULT_PP = int(current_app.config.get("DEFAULT_ITEMS_PER_PAGE", 25))
-    PER_PAGE_MAX = int(current_app.config.get("PER_PAGE_MAX", DEFAULT_PP))
-
-    q = request.args.get("q") or request.args.get("search") or None
-
-    page = _clamp(_to_int(request.args.get("page", "1"), 1), 1, 1_000_000)
-
-    raw_pp = request.args.get("per_page")
-    if raw_pp is None:
-        raw_pp = request.args.get("page_size", str(DEFAULT_PP))
-    per_page = _clamp(_to_int(raw_pp, DEFAULT_PP), 1, PER_PAGE_MAX)
-
-    sort_by = request.args.get("sort_by", "name")
-    sort_order = (request.args.get("sort_order", "asc") or "asc").lower()
-    if sort_order not in {"asc", "desc"}:
-        sort_order = "asc"
-
-    sel = {
-        "style": (_get_list("style") or _get_list("climbing_style")),
-        "rocktype": _get_list("rocktype"),
-        "county": _get_list("county"),
-    }
+    q = _str_arg("q")
+    county = _str_arg("county")
+    rocktype = _str_arg("rocktype")
+    styles = _list_arg("style") 
 
     try:
-        facets = get_crag_facets_core(db)
-        if isinstance(facets, list):
-            facets = {"countries": [], "rock_types": [], "counties": [], "climbing_styles": []}
+        facets = get_json("api/crags/facets")
+        if not isinstance(facets, dict):
+            facets = {}
     except Exception:
-        facets = {"countries": [], "rock_types": [], "counties": [], "climbing_styles": []}
+        current_app.logger.exception("facets fetch failed")
+        facets = {}
 
-    via = request.args.get("via", "")
-    filters_present = bool(q) or bool(sel["style"]) or bool(sel["rocktype"]) or bool(sel["county"])
-    if filters_present and page > 1 and via != "pager":
-        page = 1
+    params = {
+        "page": page,
+        "per_page": per_page,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
+    }
+    if q is not None:
+        params["q"] = q
+    if county is not None:
+        params["county"] = county
+    if rocktype is not None:
+        params["rocktype"] = rocktype
+    if styles is not None:
+        params["style"] = styles
 
-    data = list_crags_core(
-        q=q,
-        county=sel["county"],
-        rocktype=sel["rocktype"],
-        styles=sel["style"],
-        page=page,
-        per_page=per_page,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        db=db,
-    )
+    try:
+        data = get_json("api/crags", params=params)
+    except Exception:
+        current_app.logger.exception("crags fetch failed")
+        flash("Service is slow right now. Try again shortly.", "warning")
+        data = {"items": [], "total": 0}
 
-    items = data.get("items", []) if isinstance(data, dict) else (data or [])
-    total = int(data.get("total", len(items))) if isinstance(data, dict) else len(items)
+    items = data.get("items", [])
+    total = int(data.get("total", 0))
     total_pages = max(1, math.ceil(total / per_page))
+    current_page = min(page, total_pages)
 
-    # Overflow clamp & refetch once
-    if page > total_pages:
-        page = total_pages
-        data2 = list_crags_core(
-            q=q, county=sel["county"], rocktype=sel["rocktype"], styles=sel["style"],
-            page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order, db=db,
-        )
-        items = data2.get("items", []) if isinstance(data2, dict) else (data2 or [])
+    if page > total_pages and total_pages > 0:
+        try:
+            data = get_json("api/crags", params={**params, "page": total_pages})
+            items = data.get("items", [])
+            current_page = total_pages
+        except Exception:
+            current_app.logger.exception("refetch last page failed")
 
-    # Render
     return render_template(
         "crags.html",
         crags=items,
-        total_crags=total,
-        current_page=page,
-        total_pages=total_pages,
+        total=total,
+        page=current_page,
         per_page=per_page,
-        page=page,
+        total_pages=total_pages,
         sort_by=sort_by,
         sort_order=sort_order,
-        search_query=q or "",
-        countries=facets.get("countries", []),
-        rock_types=facets.get("rock_types", []),
-        counties=facets.get("counties", []),
-        climbing_styles=facets.get("climbing_styles", []),
-        sel=sel,
-        selected_country="",
-        selected_rocktype=(sel["rocktype"][0] if sel["rocktype"] else ""),
-        selected_climbing_style=(sel["style"][0] if sel["style"] else ""),
-        selected_county=(sel["county"][0] if sel["county"] else ""),
+        facets=facets,
+        selected={"q": q, "county": county, "rocktype": rocktype, "style": styles or []},
     )
 
-
-@web.route("/crag/<crag_id>")
-@web.route("/crags/<crag_id>")
+@web.get("/crags/<crag_id>")
 def crag_detail(crag_id: str):
-    """Detail page for a single crag.
-
-    Retrieves the crag by ID from the API and attempts to fetch current/next
-    weather by the crag's coordinates. Renders `crag_detail.html`.
-    """
-    api = current_app.config["API_BASE_URL"]
-    r = requests.get(f"{api}/api/crags/{crag_id}", timeout=10)
-    if not r.ok:
-        abort(404, "Crag not found")
-    crag = r.json()
-
-    w = requests.get(f"{api}/api/weather/{crag['latitude']}/{crag['longitude']}", timeout=8)
-    weather = w.json() if w.ok else {}
-
-    return render_template("crag_detail.html", crag=crag, weather=weather)
-
-
-@web.route("/api/weather/<path:lat>/<path:lon>")
-def weather_proxy(lat: str, lon: str):
-    """Normalizes the upstream weather response.
-
-    Accepts latitude/longitude as path segments and returns normalized JSON keys used by the
-    front-end table. Numbers are coerced to floats where possible.
-
-    Returns:
-        JSON with keys:
-            - temperature_c
-            - relative_humidity_percentage
-            - precipitation_mm
-            - windspeed_ms
-            - timestamp
-        Or an error JSON with appropriate HTTP status.
-    """
-    # Validate and coerce path segments early.
     try:
-        lat_f = float(lat)
-        lon_f = float(lon)
-    except ValueError:
-        return jsonify({"error": "bad coords"}), 400
+        crag = get_json(f"api/crags/{crag_id}")
+    except Exception:
+        current_app.logger.exception("crag fetch failed")
+        abort(404)
 
-    api = current_app.config["API_BASE_URL"]
-    url = f"{api}/api/weather/{lat_f}/{lon_f}"
-    r = requests.get(url, timeout=8)
-    current_app.logger.info("weather_proxy %s -> %s %s", (lat, lon), url, r.status_code)
-    if not r.ok:
-        return jsonify({"error": "upstream", "status": r.status_code}), r.status_code
+    limit = _int_arg("limit", 200, 1, 500)
+    offset = _int_arg("offset", 0, 0, 10_000)
+    try:
+        routes = get_json(f"api/crags/{crag_id}/routes", params={"limit": limit, "offset": offset})
+        if isinstance(routes, dict) and "items" in routes:
+            routes = routes["items"]
+    except Exception:
+        current_app.logger.exception("routes fetch failed")
+        routes = []
 
-    src = r.json()
+    return render_template("crag_detail.html", crag=crag, routes=routes)
 
-    def _num(v):
-        # Convert strings like "80%" or " 11.3 " to floats; return None on failure.
-        try:
-            return float(str(v).replace("%", "").strip())
-        except Exception:
-            return None
-
-    return jsonify(
-        {
-            "temperature_c": _num(src.get("temperature")),
-            "relative_humidity_percentage": _num(src.get("humidity")),
-            "precipitation_mm": _num(src.get("precipitation")),
-            "windspeed_ms": _num(src.get("wind")),
-            "timestamp": src.get("timestamp"),
-        }
-    )
+@web.get("/api/weather/crags/<crag_id>/forecast")
+def weather_proxy(crag_id: str):
+    """Temporary proxy to avoid CORS until you switch to single-origin LB."""
+    hours = _int_arg("hours", 24, 1, 168)
+    try:
+        data = get_json(f"api/weather/crags/{crag_id}/forecast", params={"hours": hours})
+        return jsonify(data)
+    except Exception:
+        current_app.logger.exception("weather fetch failed")
+        return jsonify({"error": "unavailable"}), 502

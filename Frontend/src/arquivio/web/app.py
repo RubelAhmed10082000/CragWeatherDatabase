@@ -19,10 +19,13 @@ def create_app() -> Flask:
     # Config (local dev can come from .env via python-dotenv; Cloud Run sets envs)
     app.config["DEFAULT_ITEMS_PER_PAGE"] = int(os.getenv("DEFAULT_ITEMS_PER_PAGE", "25"))
     app.config["PER_PAGE_MAX"] = int(os.getenv("PER_PAGE_MAX", str(app.config["DEFAULT_ITEMS_PER_PAGE"])))
-    # We deliberately do NOT use API_BASE_URL here; redirects keep us within the same service.
+    app.config["API_BASE_URL"] = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
-    @app.route("/")
-    def index():
+    from routes import web
+    app.register_blueprint(web)
+
+    @app.route("health")
+    def health():
         # Minimal root to prove liveness from the Flask side
         return jsonify({"status": "ok", "service": "flask-frontend"})
     
