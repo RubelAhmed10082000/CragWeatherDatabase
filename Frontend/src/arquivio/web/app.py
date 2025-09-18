@@ -11,7 +11,7 @@ Env:
 
 import os
 from flask import Flask, jsonify, request, redirect
-from src.arquivio.web.utils import fmt_unknown, timeago
+from .utils import fmt, fmt_unknown, timeago
 
 
 def create_app() -> Flask:
@@ -24,10 +24,14 @@ def create_app() -> Flask:
     app.config["API_BASE_URL"] = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
     app.jinja_env.filters["fmt_unknown"] = fmt_unknown
     app.jinja_env.filters["timeago"] = timeago
+    app.jinja_env.filters["fmt"] = fmt
 
     from  arquivio.web.routes import web
     app.register_blueprint(web)
     
+    app.fmt = fmt
+    app.fmt_unknown = fmt_unknown
+    app.timeago = timeago
 
     @app.route("/health")
     def health():
