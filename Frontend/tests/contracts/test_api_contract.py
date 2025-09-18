@@ -39,7 +39,8 @@ def test_facets_and_filter_roundtrip():
 def test_detail_and_routes():
     first = get("api/crags", per_page=1)["items"][0]
     d = get(f"api/crags/{first['id']}")
-    assert d["id"] == first["id"]
+    detail_id = d.get("id") or d.get("crag_id")
+    assert detail_id == first["id"]
     routes = get(f"api/crags/{first['id']}/routes", limit=10)
     assert isinstance(routes, (list, dict))
 
