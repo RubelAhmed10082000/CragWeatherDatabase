@@ -846,38 +846,30 @@ async function loadForecastIntoSidebar(hours = 24) {
   const card = document.querySelector('.sidebar .card');
   if (!card) return;
 
-  // Lightweight skeleton while loading.
   card.innerHTML = `
     <h2 class="card-title">Hourly Weather</h2>
     <div class="wx-scroller"><div class="wx-strip">Loading…</div></div>
   `;
 
   try {
-    let list = [];
-    // Primary: forecast horizon by crag id
-    const res = await getJSON(`/api/weather/crags/${CRAG_ID}/forecast?hours=${hours}`);
-    if (res.ok) {
-      const data = await res.json();
-      list = Array.isArray(data) ? data : (data ? [data] : []);
-    }
+    // primary: forecast by crag id
+    let list = await getJSON(`/api/weather/crags/${CRAG_ID}/forecast?hours=${hours}`);
+    list = Array.isArray(list) ? list : (list ? [list] : []);
 
-    // Fallback: current/next point by coordinates if forecast empty
+    // fallback: single point by lat/lon if forecast empty
     if (!list.length) {
-      const res2 = await GetJSON(`/api/weather/${LAT}/${LON}`);
-      if (res2.ok) {
-        const now = await res2.json();
-        if (now && (now.timestamp || now.time || now.date)) list = [now];
-      }
+      const now = await getJSON(`/api/weather/${LAT}/${LON}?hours=1`);
+      const arr = Array.isArray(now) ? now : (now ? [now] : []);
+      if (arr.length) list = arr;
     }
 
-    // Normalize heterogeneous shapes to a consistent structure
     const normalized = list
       .filter(Boolean)
       .map(dp => ({
-        timestamp: pickStr(dp, ["timestamp","time","ts","date","datetime"]),
-        temperature_c: pickNum(dp, ["temperature_c","temperature","temp_c","temp","temperature_2m"]),
+        timestamp:        pickStr(dp, ["timestamp","time","ts","date","datetime"]),
+        temperature_c:    pickNum(dp, ["temperature_c","temperature","temp_c","temp","temperature_2m"]),
         precipitation_mm: pickNum(dp, ["precipitation_mm","precipitation","precip_mm","precip","rain_mm","rain"]),
-        windspeed_ms: pickNum(dp, ["windspeed_ms","wind_speed_ms","wind_ms","wind_speed","wind"]),
+        windspeed_ms:     pickNum(dp, ["windspeed_ms","wind_speed_ms","wind_ms","wind_speed","wind"]),
         relative_humidity_percentage: pickNum(dp, ["relative_humidity_percentage","relative_humidity","humidity","rh"])
       }))
       .filter(dp => dp.timestamp)
@@ -886,7 +878,6 @@ async function loadForecastIntoSidebar(hours = 24) {
 
     if (!normalized.length) throw new Error('empty forecast');
 
-    // Render headers + cards in parallel strips
     const headers = normalized.map(renderHourHeader).join("");
     const cards   = normalized.map(renderHourCard).join("");
 
