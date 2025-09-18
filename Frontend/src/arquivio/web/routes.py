@@ -1,10 +1,21 @@
 from __future__ import annotations
 import math
 from flask import Blueprint, current_app, render_template, request, abort, jsonify, flash
-from lib.http import get_json 
+from lib.http import get_json, api_url
+import os
 from requests import RequestException
+import requests 
 
 web = Blueprint("web", __name__, template_folder="templates", static_folder="static")
+
+def get_json(path: str, params: dict | None = None) -> dict:
+    """GET JSON via module-level `requests` so pytest can monkeypatch it."""
+    url = api_url(path)
+    connect_t = float(os.getenv("HTTP_CONNECT_TIMEOUT", current_app.config.get("HTTP_CONNECT_TIMEOUT", 2)))
+    read_t    = float(os.getenv("HTTP_READ_TIMEOUT",    current_app.config.get("HTTP_READ_TIMEOUT",    8)))
+    resp = requests.get(url, params=params, timeout=(connect_t, read_t))
+    resp.raise_for_status()
+    return resp.json()
 
 def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
     try:
