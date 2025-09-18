@@ -95,8 +95,9 @@ def crags_page():
 def crag_detail(crag_id: str):
     try:
         crag = get_json(f"api/crags/{crag_id}")
-    except Exception:
+    except RequestException:
         current_app.logger.exception("crag fetch failed")
+        flash("That crag isn’t available right now.", "error")
         abort(404)
 
     limit = _int_arg("limit", 200, 1, 500)
@@ -106,9 +107,9 @@ def crag_detail(crag_id: str):
         if isinstance(routes, dict) and "items" in routes:
             routes = routes["items"]
     except RequestException:
-        current_app.logger.exception("crag fetch failed")
-        flash("That crag isn’t available right now.", "error")
-        abort(404)
+        current_app.logger.exception("routes fetch failed")
+        flash("Routes failed to load; showing crag info only.", "warning")
+        routes = []
     return render_template("crag_detail.html", crag=crag, routes=routes)
 
 @web.get("/api/weather/crags/<crag_id>/forecast")
@@ -119,6 +120,5 @@ def weather_proxy(crag_id: str):
         data = get_json(f"api/weather/crags/{crag_id}/forecast", params={"hours": hours})
         return jsonify(data)
     except RequestException:
-        current_app.logger.exception("routes fetch failed")
-        flash("Routes failed to load; showing crag info only.", "warning")
-        routes = []
+        current_app.logger.exception("weather fetch failed")
+        return jsonify({"error": "unavailable"}), 502

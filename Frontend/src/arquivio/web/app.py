@@ -22,10 +22,10 @@ def create_app() -> Flask:
     app.config["PER_PAGE_MAX"] = int(os.getenv("PER_PAGE_MAX", str(app.config["DEFAULT_ITEMS_PER_PAGE"])))
     app.config["API_BASE_URL"] = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
-    from routes import web
+    from  arquivio.web.routes import web
     app.register_blueprint(web)
 
-    @app.route("health")
+    @app.route("/health")
     def health():
         # Minimal root to prove liveness from the Flask side
         return jsonify({"status": "ok", "service": "flask-frontend"})

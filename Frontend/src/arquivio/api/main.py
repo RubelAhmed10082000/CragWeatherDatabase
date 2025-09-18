@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.wsgi import WSGIMiddleware
 from arquivio.web.app import app as flask_app
-from .services.cockroach import db
+from arquivio.api.services.cockroach import db
 import os
 from time import monotonic
 from sqlalchemy import text
