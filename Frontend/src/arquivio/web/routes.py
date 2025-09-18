@@ -118,6 +118,9 @@ def crags_page():
         },
         api_base_url=current_app.config.get("API_BASE_URL", ""),
     )
+@web.get("/crag/<crag_id>")
+def crag_detail_alias(crag_id: str):
+    return crag_detail(crag_id)
 
 @web.get("/crags/<crag_id>")
 def crag_detail(crag_id: str):
@@ -138,15 +141,14 @@ def crag_detail(crag_id: str):
         current_app.logger.exception("routes fetch failed")
         flash("Routes failed to load; showing crag info only.", "warning")
         routes = []
-    return render_template("crag_detail.html", crag=crag, routes=routes)
+    return render_template("crag_detail.html", crag=crag, routes=routes, api_base_url=current_app.config.get("API_BASE_URL", ""))
 
 @web.get("/api/weather/crags/<crag_id>/forecast")
 def weather_proxy(crag_id: str):
-    """Temporary proxy to avoid CORS until you switch to single-origin LB."""
     hours = _int_arg("hours", 24, 1, 168)
     try:
         data = get_json(f"api/weather/crags/{crag_id}/forecast", params={"hours": hours})
         return jsonify(data)
     except RequestException:
         current_app.logger.exception("weather fetch failed")
-        return jsonify({"error": "unavailable"}), 502
+        return jsonify([]), 200
