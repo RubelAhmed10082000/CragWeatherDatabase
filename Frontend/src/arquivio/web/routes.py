@@ -1,8 +1,8 @@
-# src/arquivio/web/routes.py
 from __future__ import annotations
 import math
 from flask import Blueprint, current_app, render_template, request, abort, jsonify, flash
 from lib.http import get_json 
+from requests import RequestException
 
 web = Blueprint("web", __name__, template_folder="templates", static_folder="static")
 
@@ -37,8 +37,9 @@ def crags_page():
         facets = get_json("api/crags/facets")
         if not isinstance(facets, dict):
             facets = {}
-    except Exception:
+    except RequestException:
         current_app.logger.exception("facets fetch failed")
+        flash("Facets are temporarily unavailable.", "warning")
         facets = {}
 
     params = {
@@ -58,9 +59,9 @@ def crags_page():
 
     try:
         data = get_json("api/crags", params=params)
-    except Exception:
+    except RequestException:
         current_app.logger.exception("crags fetch failed")
-        flash("Service is slow right now. Try again shortly.", "warning")
+        flash("Our data service is slow right now. Showing an empty list.", "warning")
         data = {"items": [], "total": 0}
 
     items = data.get("items", [])
@@ -73,8 +74,9 @@ def crags_page():
             data = get_json("api/crags", params={**params, "page": total_pages})
             items = data.get("items", [])
             current_page = total_pages
-        except Exception:
+        except RequestException:
             current_app.logger.exception("refetch last page failed")
+            flash("Couldn’t load the requested page of results.", "warning")
 
     return render_template(
         "crags.html",
@@ -103,10 +105,10 @@ def crag_detail(crag_id: str):
         routes = get_json(f"api/crags/{crag_id}/routes", params={"limit": limit, "offset": offset})
         if isinstance(routes, dict) and "items" in routes:
             routes = routes["items"]
-    except Exception:
-        current_app.logger.exception("routes fetch failed")
-        routes = []
-
+    except RequestException:
+        current_app.logger.exception("crag fetch failed")
+        flash("That crag isn’t available right now.", "error")
+        abort(404)
     return render_template("crag_detail.html", crag=crag, routes=routes)
 
 @web.get("/api/weather/crags/<crag_id>/forecast")
@@ -116,6 +118,7 @@ def weather_proxy(crag_id: str):
     try:
         data = get_json(f"api/weather/crags/{crag_id}/forecast", params={"hours": hours})
         return jsonify(data)
-    except Exception:
-        current_app.logger.exception("weather fetch failed")
-        return jsonify({"error": "unavailable"}), 502
+    except RequestException:
+        current_app.logger.exception("routes fetch failed")
+        flash("Routes failed to load; showing crag info only.", "warning")
+        routes = []
