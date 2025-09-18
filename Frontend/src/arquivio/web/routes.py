@@ -3,19 +3,27 @@ import math
 from flask import Blueprint, current_app, render_template, request, abort, jsonify, flash
 from lib.http import get_json, api_url
 import os
-from requests import RequestException
+from requests import RequestException, HTTPError
 import requests 
 
 web = Blueprint("web", __name__, template_folder="templates", static_folder="static")
 
 def get_json(path: str, params: dict | None = None) -> dict:
-    """GET JSON via module-level `requests` so pytest can monkeypatch it."""
+    """GET JSON via module-level `requests` so pytest can monkeypatch it.
+    Normalize *any* failure into RequestException for the caller.
+    """
     url = api_url(path)
     connect_t = float(os.getenv("HTTP_CONNECT_TIMEOUT", current_app.config.get("HTTP_CONNECT_TIMEOUT", 2)))
     read_t    = float(os.getenv("HTTP_READ_TIMEOUT",    current_app.config.get("HTTP_READ_TIMEOUT",    8)))
-    resp = requests.get(url, params=params, timeout=(connect_t, read_t))
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.get(url, params=params, timeout=(connect_t, read_t))
+        if hasattr(resp, "ok") and not resp.ok:
+            raise HTTPError(f"HTTP {getattr(resp, 'status_code', '???')}", response=resp)
+        if hasattr(resp, "raise_for_status"):
+            resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        raise RequestException(str(e))
 
 def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
     try:
@@ -40,9 +48,9 @@ def crags_page():
     sort_order = request.args.get("sort_order") or "asc"
 
     q = _str_arg("q")
-    county = _str_arg("county")
-    rocktype = _str_arg("rocktype")
-    styles = _list_arg("style") 
+    counties_sel = _list_arg("county")
+    rocktypes_sel = _list_arg("rocktype")
+    styles_sel = _list_arg("style")
 
     try:
         facets = get_json("api/crags/facets")
@@ -53,20 +61,20 @@ def crags_page():
         flash("Facets are temporarily unavailable.", "warning")
         facets = {}
 
+    counties = facets.get("counties", []) or []
+    rock_types = facets.get("rock_types", []) or []
+    climbing_styles = facets.get("climbing_styles", []) or []
+
     params = {
         "page": page,
         "per_page": per_page,
         "sort_by": sort_by,
         "sort_order": sort_order,
     }
-    if q is not None:
-        params["q"] = q
-    if county is not None:
-        params["county"] = county
-    if rocktype is not None:
-        params["rocktype"] = rocktype
-    if styles is not None:
-        params["style"] = styles
+    if q: params["q"] = q
+    if counties_sel: params["county"] = counties_sel     
+    if rocktypes_sel: params["rocktype"] = rocktypes_sel  
+    if styles_sel: params["style"] = styles_sel           
 
     try:
         data = get_json("api/crags", params=params)
@@ -93,13 +101,22 @@ def crags_page():
         "crags.html",
         crags=items,
         total=total,
-        page=current_page,
         per_page=per_page,
         total_pages=total_pages,
+        current_page=current_page,
         sort_by=sort_by,
         sort_order=sort_order,
-        facets=facets,
-        selected={"q": q, "county": county, "rocktype": rocktype, "style": styles or []},
+        search_query=q or "",
+        counties=counties,
+        rock_types=rock_types,
+        climbing_styles=climbing_styles,
+        sel={
+            "q": q or "",
+            "county": counties_sel or [],
+            "rocktype": rocktypes_sel or [],
+            "style": styles_sel or [],
+        },
+        api_base_url=current_app.config.get("API_BASE_URL", ""),
     )
 
 @web.get("/crags/<crag_id>")
