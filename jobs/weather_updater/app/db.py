@@ -5,7 +5,10 @@ import psycopg
 from psycopg.rows import dict_row
 from typing import Iterable, Mapping, Any, Tuple
 from datetime import timezone, datetime,timedelta
-
+import os
+import time
+from contextlib import contextmanager
+from typing import Optional
 
 
 SKIP_VIEWS   = os.getenv("SKIP_VIEWS", "0") == "1" 
@@ -23,8 +26,6 @@ PARTIAL_WINDOW_POLICY = os.getenv("PARTIAL_WINDOW_POLICY", "allow")
 WINDOW_HOURS = int(os.getenv("WINDOW_HOURS", "1"))          
 
 WINDOW_SAFETY_MIN = int(os.getenv("WINDOW_SAFETY_MIN", "10"))
-
-WINDOW_HOURS = max(1, WINDOW_HOURS)
 
 WINDOW_SAFETY_MIN = max(0, min(WINDOW_SAFETY_MIN, 30))
 
@@ -274,7 +275,6 @@ def _ensure_tables(conn):
     ADD COLUMN IF NOT EXISTS ru_per_k      NUMERIC(12,2);
 """)
     
-    # Creating table that last time each crag experienced rain
     run_sql(conn, """
     CREATE TABLE IF NOT EXISTS public.crag_last_rain_state (
       crag_id UUID PRIMARY KEY,
@@ -329,7 +329,6 @@ def _ensure_views(conn):
     ORDER BY 1 DESC;
     """)
   
-  # routes + crags
 
     run_sql(conn, """ 
     CREATE OR REPLACE VIEW public.v_routes_with_crag AS
@@ -349,7 +348,6 @@ def _ensure_views(conn):
     JOIN public.dimcrags c USING (crag_id);
     """)
 
-  # Weather with crag attributes for API/frontend
     run_sql(conn, "DROP VIEW IF EXISTS public.v_crag_hourly_weather")
     
     run_sql(conn, """
@@ -458,7 +456,7 @@ def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch
 
     with get_connection() as conn, conn.cursor() as cur:
         if STAGING_RETRY_MODE == "purge":
-            purge_staging(conn, load_batch_id)  
+            delete_by_batch(conn, load_batch_id)  
 
         for i in range(0, len(rows), batch_size):
             chunk = rows[i:i + batch_size]
@@ -486,66 +484,77 @@ def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch
 
         conn.commit()
 
-    return inserted
+    return inserted  
 
-    
-
-def delete_staging_batch(load_batch_id:str) -> int:
+def delete_by_batch(batch_id: str, schema: str = "public", table: str = "stg_weather_route") -> int:
+    sql = f"""
+    WITH d AS (
+      DELETE FROM {schema}.{table}
+      WHERE load_batch_id = %s
+      RETURNING 1
+    )
+    SELECT count(*) FROM d;
     """
-    Deletes load batches
-    """
-    if TTL_ENABLED:
-        return 0
-
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM public.stg_weather_route WHERE load_batch_id = %(b)s", 
-                    {"b":load_batch_id}
-        )
-        deleted = cur.rowcount or 0
-    return deleted 
-
-def purge_staging(conn, load_batch_id: str) -> int:
-    """
-    Delete a staging batch inside the caller's transactions.
-    """
-    with conn.cursor() as cur:
-        cur.execute("""
-              DELETE FROM public.stg_weather_route
-              WHERE load_batch_id = %(b)s
-              """, {"b":load_batch_id})
-        return cur.rowcount or 0
-
-def purge_staging_standalone(load_batch_id: str) -> int:
-    with get_connection() as conn:
-        n = purge_staging(conn, load_batch_id)
+        cur.execute(sql, (batch_id,))
+        n = int(cur.fetchone()[0])
         conn.commit()
         return n
 
-def delete_old_staging(days: int = 7, conn=None, exclude_batch: str | None = None) -> int:
+def delete_by_batch_loop(batch_id: str,
+                         schema: str = "public", table: str = "stg_weather_route",
+                         chunk_size: int = 5000, sleep_seconds: float = 0.0) -> int:
+    chunk_sql = f"""
+    WITH d AS (
+      DELETE FROM {schema}.{table}
+      WHERE load_batch_id = %s
+      LIMIT {chunk_size}
+      RETURNING 1
+    )
+    SELECT count(*) FROM d;
     """
-    Delete old rows from staging by age of staging event (staged_at).
-    If `conn` is provided, run inside caller's transaction; otherwise open a one-off connection.
+    total = 0
+    while True:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(chunk_sql, (batch_id,))
+            deleted = int(cur.fetchone()[0])
+            conn.commit()
+        total += deleted
+        if deleted == 0:
+            break
+        if sleep_seconds > 0:
+            time.sleep(sleep_seconds)
+    return total
+
+def count_staged_rows(batch_id: str, schema: str = "public", table: str = "stg_weather_route") -> int:
+    sql = f"SELECT count(*) FROM {schema}.{table} WHERE load_batch_id = %s;"
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, (batch_id,))
+        return int(cur.fetchone()[0])
+
+def log_cleanup(batch_id: str, window_label: str, rows_deleted: int,
+                ru_observed: Optional[float] = None, ru_per_row_obs: Optional[float] = None,
+                schema: str = "public", logs_table: str = "crag_runs_logs") -> None:
+    sql = f"""
+    INSERT INTO {schema}.{logs_table}
+    (batch_id, phase, window_label, rows_deleted, ru_observed, ru_per_row_obs, load_ts)
+    VALUES (%s, 'cleanup', %s, %s, %s, %s, now());
     """
-    if TTL_ENABLED:
-        return 0
-    
-    if conn is None:
-        with get_connection() as conn2:
-            return delete_old_staging(days=days, conn=conn2, exclude_batch=exclude_batch)
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, (batch_id, window_label, rows_deleted, ru_observed, ru_per_row_obs))
+        conn.commit()
 
-    params = {"cutoff_days": days}
-    exclude_sql = ""
-    if exclude_batch:
-        exclude_sql = "AND load_batch_id <> %(exclude)s"
-        params["exclude"] = exclude_batch
-
-    with conn.cursor() as cur:
-        cur.execute(f"""
-            DELETE FROM public.stg_weather_route
-            WHERE staged_at < now() - (%(cutoff_days)s || ' days')::interval
-            {exclude_sql}
-        """, params)
-        return cur.rowcount or 0
+def cleanup_staging_batch(batch_id: str, window_label: str,
+                          chunk_size: int = 5000, sleep_seconds: float = 0.02,
+                          schema: str = "public", table: str = "stg_weather_route") -> int:
+    total = delete_by_batch_loop(batch_id, schema=schema, table=table,
+                                 chunk_size=chunk_size, sleep_seconds=sleep_seconds)
+    try:
+        log_cleanup(batch_id, window_label, rows_deleted=total,
+                    ru_observed=None, ru_per_row_obs=None)
+    except Exception:
+        pass
+    return total
     
 
 
