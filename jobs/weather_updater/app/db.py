@@ -177,7 +177,6 @@ def _ensure_tables(conn):
     rock_in  = _sql_in_list(ROCK_TYPES_ALLOWED)
     style_in = _sql_in_list(STYLES_ALLOWED)
     
-    # dimcrags 
     run_sql(conn, f"""
     CREATE TABLE IF NOT EXISTS public.dimcrags (
             crag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -292,9 +291,8 @@ def _ensure_indexes(conn):
     """
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_date_idx ON public.fact_crag_hourly_weather (date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_crag_date_idx ON public.fact_crag_hourly_weather (crag_id, date);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_batch_idx ON public.stg_weather_route (load_batch_id);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_staged_at_idx ON public.stg_weather_route (staged_at);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS stg_weather_crag_date_idx ON public.stg_weather_route (crag_id, date);")
+    run_sql(conn, "CREATE INDEX IF NOT EXISTS idx_stg_load_batch_id ON public.stg_weather_route (load_batch_id);")
+    run_sql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uq_stg_crag_date_batch ON public.stg_weather_route (crag_id, date, load_batch_id ASC);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_batch_idx ON public.fact_crag_hourly_weather (load_batch_id);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_loadts_idx ON public.fact_crag_hourly_weather (load_ts);")
 
