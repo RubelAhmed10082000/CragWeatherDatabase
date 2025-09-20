@@ -3,7 +3,7 @@ import os
 from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
-from typing import Iterable, Mapping, Any, Tuple
+from typing import Iterable, Mapping, Any
 from datetime import timezone, datetime,timedelta
 import os
 import time
@@ -498,20 +498,6 @@ def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch
 
     return inserted  
 
-def delete_by_batch(batch_id: str, schema: str = "public", table: str = "stg_weather_route") -> int:
-    sql = f"""
-    WITH d AS (
-      DELETE FROM {schema}.{table}
-      WHERE load_batch_id = %s
-      RETURNING 1
-    )
-    SELECT count(*) FROM d;
-    """
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, (batch_id,))
-        n = int(cur.fetchone()[0])
-        conn.commit()
-        return n
 
 def delete_by_batch_loop(batch_id: str,
                          schema: str = "public", table: str = "stg_weather_route",
@@ -556,20 +542,7 @@ def log_cleanup(batch_id: str, window_label: str, rows_deleted: int,
         cur.execute(sql, (batch_id, window_label, rows_deleted, ru_observed, ru_per_row_obs))
         conn.commit()
 
-def cleanup_staging_batch(batch_id: str, window_label: str,
-                          chunk_size: int = 5000, sleep_seconds: float = 0.02,
-                          schema: str = "public", table: str = "stg_weather_route") -> int:
-    total = delete_by_batch_loop(batch_id, schema=schema, table=table,
-                                 chunk_size=chunk_size, sleep_seconds=sleep_seconds)
-    try:
-        log_cleanup(batch_id, window_label, rows_deleted=total,
-                    ru_observed=None, ru_per_row_obs=None)
-    except Exception:
-        pass
-    return total
     
-
-
 def upsert_from_staging(
     load_batch_id: str,
     hours: int,

@@ -23,7 +23,6 @@ from jobs.weather_updater.fetch_weather_data.openmeteo_upsert import fetch_weath
 
 # Importing env variables
 DP             = int(os.getenv("DP", "6"))
-RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
 TOTAL_SHARDS   = int(os.getenv("TOTAL_SHARDS", "16"))
 SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", "0")))
 CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
@@ -33,7 +32,6 @@ MAX_ROWS_PER_RUN = int(os.getenv("MAX_ROWS_PER_RUN", "0") or 0)
 WINDOW_SAFETY_MIN   = int(os.getenv("WINDOW_SAFETY_MIN", "10"))  
 DEL_CHUNK_SIZE      = int(os.getenv("DEL_CHUNK_SIZE", "5000"))
 DEL_CHUNK_SLEEP_S   = float(os.getenv("DEL_CHUNK_SLEEP_S", "0.02"))
-RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
 
                      
 # Creating chunks 
@@ -85,7 +83,10 @@ def main():
 
     # Ensuring both staging and weather table exists
     # Otherwise creates them
-    ensure_schema()
+    try:
+        ensure_schema()
+    except Exception as e:
+        print(f"Schema failed {e}")
 
     # Fetch crag_ids as well as coordinate for each crag_id
     crag_ids = fetch_crag_ids_for_shard(TOTAL_SHARDS, SHARD_INDEX)
@@ -169,6 +170,21 @@ def main():
              "hard_cap_rows": MAX_ROWS_PER_RUN,
              "hard_cap_hit": cap_hit
          })
+        
+    except Exception as e:
+       
+        try:
+                log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="failed", notes=str(e))
+        except Exception:
+                pass
+        raise
+
+    finally:
+        elapsed = time.perf_counter() - t0
+        try:
+            log_free_tier_usage(elapsed)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

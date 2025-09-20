@@ -5,10 +5,6 @@ import itertools
 
 print("CERT_DIR_CONTENTS", os.listdir("/certs") if os.path.exists("/certs") else "NO_CERTS")
 
-
-
-
-
 # Importing all functions from db.py
 from jobs.weather_updater.app.db import (
     ensure_schema,
