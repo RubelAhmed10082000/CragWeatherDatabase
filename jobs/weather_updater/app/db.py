@@ -420,7 +420,26 @@ def fetch_coords_for_crags(crag_ids: Iterable[str]) -> dict[str,tuple[float, flo
         rows = cur.fetchall()
         return {r["crag_id"]:(float(r["latitude"]), float(r["longitude"])) for r in rows}
     
+def _is_retryable(err: Exception) -> bool:
+    return getattr(err, "pgcode", None) == "40001" or "restart transaction" in str(err).lower()
 
+def run_txn_with_retry(fn, max_retries: int = 5, sleep_base: float = 0.1):
+    """
+    Runs `fn(conn, cur)` inside a transaction with automatic retries on 40001.
+    `fn` must not commit/rollback; it should just execute statements.
+    """
+    for attempt in range(max_retries):
+        try:
+            with get_connection() as conn, conn.cursor() as cur:
+                fn(conn, cur)          
+                conn.commit()          
+                return
+        except Exception as e:
+            if _is_retryable(e) and attempt < max_retries - 1:
+                time.sleep(sleep_base * (2 ** attempt))  
+                continue
+            raise
+        
 def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch_size: int = 5000) -> int:
     """
     Batch insert into stg_weather_route with optional retry policy.
