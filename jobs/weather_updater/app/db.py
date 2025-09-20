@@ -84,6 +84,13 @@ def _ensure_ssl_params(dsn: str) -> str:
         dsn += '&sslrootcert=/certs/root.crt'
     return dsn
 
+def _one_int(row, key: str | None = None) -> int:
+    """Return an int from a single-row/single-col fetchone() for tuple or dict rows."""
+    if row is None:
+        return 0
+    if key and isinstance(row, dict) and key in row:
+        return int(row[key])
+    return int(next(iter(row.values())) if isinstance(row, dict) else row[0])
 
 
 @contextmanager
@@ -274,7 +281,6 @@ def _ensure_indexes(conn):
     """
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_date_idx ON public.fact_crag_hourly_weather (date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS idx_stg_load_batch_id ON public.stg_weather_route (load_batch_id);")
-    run_sql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uq_stg_crag_date_batch ON public.stg_weather_route (crag_id, date, load_batch_id ASC);")
 
 
 def _record_version(conn, version_id:str):
@@ -416,9 +422,9 @@ def _delete_staging_chunk_in_tx(cur, batch_id: str, chunk_size: int) -> int:
           LIMIT {chunk_size}
           RETURNING 1
         )
-        SELECT count(*) FROM d;
+        SELECT count(*) AS n FROM d;
     """, (batch_id,))
-    return int(cur.fetchone()[0])
+    return _one_int(cur.fetchone(), "n")
         
 def load_to_staging(rows: Iterable[Mapping[str, Any]], load_batch_id: str, batch_size: int = 5000) -> int:
     """
@@ -489,13 +495,13 @@ def delete_by_batch_loop(batch_id: str,
       LIMIT {chunk_size}
       RETURNING 1
     )
-    SELECT count(*) FROM d;
+    SELECT count(*) AS n FROM d;
     """
     total = 0
     while True:
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute(chunk_sql, (batch_id,))
-            deleted = int(cur.fetchone()[0])
+            deleted = _one_int(cur.fetchone(), "n")
             conn.commit()
         total += deleted
         if deleted == 0:
@@ -505,10 +511,10 @@ def delete_by_batch_loop(batch_id: str,
     return total
 
 def count_staged_rows(batch_id: str, schema: str = "public", table: str = "stg_weather_route") -> int:
-    sql = f"SELECT count(*) FROM {schema}.{table} WHERE load_batch_id = %s;"
+    sql = f"SELECT count(*) AS n FROM {schema}.{table} WHERE load_batch_id = %s;"
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, (batch_id,))
-        return int(cur.fetchone()[0])
+        return _one_int(cur.fetchone(), "n")
 
 def log_cleanup(batch_id: str, window_label: str, rows_deleted: int,
                 ru_observed: Optional[float] = None, ru_per_row_obs: Optional[float] = None,
