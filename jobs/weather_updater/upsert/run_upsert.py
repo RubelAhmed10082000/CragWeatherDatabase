@@ -5,15 +5,12 @@ import itertools
 
 print("CERT_DIR_CONTENTS", os.listdir("/certs") if os.path.exists("/certs") else "NO_CERTS")
 
-# Importing all functions from db.py
 from jobs.weather_updater.app.db import (
     ensure_schema,
     fetch_crag_ids_for_shard,
     fetch_coords_for_crags,
     load_to_staging,
-    delete_staging_batch,
-    delete_old_staging,
-    upsert_fact_window,
+    upsert_from_staging,
     log_run_start,
     log_run_finish
 )
@@ -26,13 +23,15 @@ from jobs.weather_updater.fetch_weather_data.openmeteo_upsert import fetch_weath
 
 # Importing env variables
 DP             = int(os.getenv("DP", "6"))
-RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
 TOTAL_SHARDS   = int(os.getenv("TOTAL_SHARDS", "16"))
 SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", "0")))
 CHUNK_SIZE     = int(os.getenv("CHUNK_SIZE", "150"))
 MAX_POINTS     = int(os.getenv("MAX_POINTS_PER_SHARD", "0")) 
 WINDOW_HOURS   = int(os.getenv("WINDOW_HOURS", "12")) 
 MAX_ROWS_PER_RUN = int(os.getenv("MAX_ROWS_PER_RUN", "0") or 0) 
+WINDOW_SAFETY_MIN   = int(os.getenv("WINDOW_SAFETY_MIN", "10"))  
+DEL_CHUNK_SIZE      = int(os.getenv("DEL_CHUNK_SIZE", "5000"))
+DEL_CHUNK_SLEEP_S   = float(os.getenv("DEL_CHUNK_SLEEP_S", "0.02"))
 
                      
 # Creating chunks 
@@ -84,7 +83,10 @@ def main():
 
     # Ensuring both staging and weather table exists
     # Otherwise creates them
-    ensure_schema()
+    try:
+        ensure_schema()
+    except Exception as e:
+        print(f"Schema failed {e}")
 
     # Fetch crag_ids as well as coordinate for each crag_id
     crag_ids = fetch_crag_ids_for_shard(TOTAL_SHARDS, SHARD_INDEX)
@@ -122,12 +124,6 @@ def main():
             max_cells=max_cells,
         )
 
-        original_count = len(df_all)
-        cap_hit = False
-        if MAX_ROWS_PER_RUN > 0 and original_count > MAX_ROWS_PER_RUN:
-            df_all = df_all.head(MAX_ROWS_PER_RUN).copy()
-            cap_hit = True
-
         if df_all.empty:
             print(f"No rows fetched (cells={cells_hit}, crags_covered={crags_covered}).")
             log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="no_data")
@@ -141,43 +137,57 @@ def main():
 
         staged = load_to_staging(df_all.to_dict(orient="records"), load_batch_id=batch_id)
         
-        upserted, deleted = upsert_fact_window(load_batch_id=batch_id, hours=WINDOW_HOURS)
-
-        if os.getenv("KEEP_STAGING", "0") == "1":
-            deleted_staging = 0
-        else:
-            deleted_staging = delete_staging_batch(batch_id)
-        pruned = delete_old_staging(days=RETENTION_DAYS)
+        res = upsert_from_staging(
+            load_batch_id=batch_id,
+            hours=WINDOW_HOURS,
+            safety_min=WINDOW_SAFETY_MIN,
+            chunk_size=DEL_CHUNK_SIZE,
+            sleep_seconds=DEL_CHUNK_SLEEP_S,
+        )
+        upserted = res.get("upserted", 0)
+        deleted_in_staging= res.get("staging_deleted", 0)
         RU_PER_K = float(os.getenv("RU_PER_K", "18000"))
-        rows_inserted = upserted
-        rows_deleted  = deleted 
-        rows_updated  = 0  
+        ru_estimate = int(((upserted) / 1000.0) * RU_PER_K)
 
-        ru_estimate = int(((rows_inserted + rows_deleted + rows_updated) / 1000.0) * RU_PER_K)
-
-
-        log_run_finish(run_id, staged=staged, unmatched=0, upserted=upserted, status="success",
-                       rows_inserted=rows_inserted, rows_deleted=rows_deleted, rows_updated=rows_updated,
-                       ru_estimate=ru_estimate, ru_per_k=RU_PER_K)
+        log_run_finish(
+            run_id,
+           staged=staged,
+           unmatched=0,
+            upserted=upserted,
+            status="success",
+            rows_inserted=upserted,
+            rows_deleted=0,              
+            rows_updated=0,             
+            ru_estimate=ru_estimate,
+            ru_per_k=RU_PER_K,
+        )
+        
         print({
-            "staged": staged,
-            "upserted": upserted,
-            "deleted_in_window": deleted,
-            "deleted_staging": deleted_staging,
-            "pruned_staging_older_days": pruned,
-            "hard_cap_rows": MAX_ROWS_PER_RUN,
-            "hard_cap_hit": cap_hit
-        })
-
+             "staged": staged,
+             "upserted": upserted,
+             "deleted_in_window": 0,
+             "deleted_staging": deleted_in_staging,
+             "hard_cap_rows": MAX_ROWS_PER_RUN,
+             "hard_cap_hit": cap_hit
+         })
+        
     except Exception as e:
-        log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status=f"failed: {e}")
+       
+        try:
+                log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="failed", notes=str(e))
+        except Exception:
+                pass
         raise
+
     finally:
         elapsed = time.perf_counter() - t0
-        log_free_tier_usage(elapsed)
+        try:
+            log_free_tier_usage(elapsed)
+        except Exception:
+            pass
 
-       
 
 if __name__ == "__main__":
     main()
+
 
