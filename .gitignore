@@ -41,4 +41,5 @@ jobs_*
 --service-account
 
 cockroach-ca.crt
+.vscode
 
