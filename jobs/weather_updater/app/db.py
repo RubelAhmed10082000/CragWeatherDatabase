@@ -290,14 +290,8 @@ def _ensure_indexes(conn):
     Ensures indexes exists, if not it creates tem
     """
     run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_date_idx ON public.fact_crag_hourly_weather (date);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_crag_date_idx ON public.fact_crag_hourly_weather (crag_id, date);")
     run_sql(conn, "CREATE INDEX IF NOT EXISTS idx_stg_load_batch_id ON public.stg_weather_route (load_batch_id);")
     run_sql(conn, "CREATE UNIQUE INDEX IF NOT EXISTS uq_stg_crag_date_batch ON public.stg_weather_route (crag_id, date, load_batch_id ASC);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_batch_idx ON public.fact_crag_hourly_weather (load_batch_id);")
-    run_sql(conn, "CREATE INDEX IF NOT EXISTS fact_weather_loadts_idx ON public.fact_crag_hourly_weather (load_ts);")
-
-    if not SKIP_VIEWS:
-      run_sql(conn, "CREATE INDEX IF NOT EXISTS dimroutes_crag_idx ON public.dimroutes (crag_id);")
 
 
 def _record_version(conn, version_id:str):
@@ -311,7 +305,6 @@ def _ensure_views(conn):
     """
     Ensure views exists otherwise creates them
     """
-  # View for RU obersvability daily usage
     run_sql(conn, """
       CREATE OR REPLACE VIEW public.v_ru_usage_daily AS
       SELECT
@@ -324,7 +317,6 @@ def _ensure_views(conn):
       ORDER BY 1 DESC;
       """)
     
-    # View for RU observaibility monthly usage
     run_sql(conn, """
     CREATE OR REPLACE VIEW public.v_ru_usage_monthly AS
     SELECT
