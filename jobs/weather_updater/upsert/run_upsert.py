@@ -1,7 +1,8 @@
 import os 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import time
-import itertools
+import pandas as pd
+from functools import partial
 
 print("CERT_DIR_CONTENTS", os.listdir("/certs") if os.path.exists("/certs") else "NO_CERTS")
 
@@ -21,7 +22,7 @@ from jobs.weather_updater.geo.quantize import quantized_fetch_to_df
 # Importing both fetch and clean functions for weather data
 from jobs.weather_updater.fetch_weather_data.openmeteo_upsert import fetch_weather_for_crags_staging
 
-# Importing env variables
+
 DP             = int(os.getenv("DP", "6"))
 TOTAL_SHARDS   = int(os.getenv("TOTAL_SHARDS", "16"))
 SHARD_INDEX    = int(os.getenv("CLOUD_RUN_TASK_INDEX", os.getenv("SHARD_INDEX", "0")))
@@ -33,7 +34,39 @@ WINDOW_SAFETY_MIN   = int(os.getenv("WINDOW_SAFETY_MIN", "10"))
 DEL_CHUNK_SIZE      = int(os.getenv("DEL_CHUNK_SIZE", "5000"))
 DEL_CHUNK_SLEEP_S   = float(os.getenv("DEL_CHUNK_SLEEP_S", "0.02"))
 
-                     
+print({
+  "event": "job_env",
+  "TOTAL_SHARDS": TOTAL_SHARDS,
+  "SHARD_INDEX": SHARD_INDEX,
+  "CHUNK_SIZE": CHUNK_SIZE,
+  "MAX_ROWS_PER_RUN": MAX_ROWS_PER_RUN,
+  "WINDOW_HOURS": WINDOW_HOURS,
+  "WINDOW_SAFETY_MIN": WINDOW_SAFETY_MIN
+})
+
+
+now_utc   = datetime.now(timezone.utc)
+_wend     = now_utc - timedelta(minutes=max(0, WINDOW_SAFETY_MIN))   
+win_end   = _wend.replace(minute=0, second=0, microsecond=0)         
+win_start = win_end - timedelta(hours=max(1, WINDOW_HOURS))         
+
+print({
+    "event": "window",
+    "window_start_utc": win_start.isoformat(),
+    "window_end_utc": win_end.isoformat()
+})
+
+
+def make_hour_fetcher(target_hour_utc):
+    def _fetch(group, load_batch_id, max_points):
+        return fetch_weather_for_crags_staging(
+            group,
+            load_batch_id=load_batch_id,
+            max_points=max_points,
+            target_hour_utc=target_hour_utc,  
+        )
+    return _fetch
+                   
 # Creating chunks 
 def chunk(lst, n):
     for i in range(0, len(lst),n):
@@ -111,27 +144,44 @@ def main():
     t0 = time.perf_counter()
 
     try:
-        # Fetch weather rows into staging-ready DataFrames in chunks
-        cell_deg = float(os.getenv("CELL_DEG", "0.25"))               # ~28km cells
-        max_cells = int(os.getenv("MAX_CELLS_PER_SHARD", "0"))        # 0 = all cells
+        cell_deg = float(os.getenv("CELL_DEG", "0.25"))              
+        max_cells = int(os.getenv("MAX_CELLS_PER_SHARD", "0"))        
 
-        df_all, cells_hit, crags_covered = quantized_fetch_to_df(
-            coords_by_id=coords_by_id,
-            batch_id=batch_id,
-            fetch_fn=fetch_weather_for_crags_staging,  # existing helper
-            chunk_size=CHUNK_SIZE,
-            cell_deg=cell_deg,
-            max_cells=max_cells,
-        )
+        frames = []
+        t = win_start
+        while t < win_end:
+            df_h, cells_hit_h, crags_covered_h = quantized_fetch_to_df(
+                coords_by_id=coords_by_id,
+                batch_id=batch_id,
+                fetch_fn=make_hour_fetcher(t),
+                chunk_size=CHUNK_SIZE,
+                cell_deg=cell_deg,
+                max_cells=max_cells,
+            )
+            frames.append(df_h)
+            t += timedelta(hours=1)
+
+        df_all = pd.concat(frames, ignore_index=True)
+
+        print({
+        "event": "window_quality",
+        "rows": int(len(df_all)),
+        "unique_hours": int(df_all["date"].nunique()),
+        "min_ts": str(df_all["date"].min()),
+        "max_ts": str(df_all["date"].max())
+        })
 
         if df_all.empty:
-            print(f"No rows fetched (cells={cells_hit}, crags_covered={crags_covered}).")
             log_run_finish(run_id, staged=0, unmatched=0, upserted=0, status="no_data")
             return
-        
+    
         original_count = len(df_all)
+        df_all = df_all[(df_all["date"] >= win_start) & (df_all["date"] < win_end)].copy()
+
+        print({"event":"pre_stage_counts","rows_fetched": int(original_count), "rows_in_window": int(len(df_all))})
+
         cap_hit = False
-        if MAX_ROWS_PER_RUN > 0 and original_count > MAX_ROWS_PER_RUN:
+        if MAX_ROWS_PER_RUN > 0 and len(df_all) > MAX_ROWS_PER_RUN:
             df_all = df_all.head(MAX_ROWS_PER_RUN).copy()
             cap_hit = True
 
@@ -166,6 +216,8 @@ def main():
              "staged": staged,
              "upserted": upserted,
              "deleted_in_window": 0,
+             "rows_scanned": int(len(df_all)),       
+             "rows_changed": int(upserted),
              "deleted_staging": deleted_in_staging,
              "hard_cap_rows": MAX_ROWS_PER_RUN,
              "hard_cap_hit": cap_hit

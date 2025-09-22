@@ -3,11 +3,13 @@ import pandas as pd
 import requests_cache
 from retry_requests import retry
 import openmeteo_requests
+from datetime import timedelta, datetime
 
 def fetch_weather_for_crags_staging(
     crags: List[Tuple[str, float, float]],
     load_batch_id: str,
-    max_points: int | None = None
+    max_points: int | None = None,
+    target_hour_utc: datetime | None = None
 ) -> pd.DataFrame:
     """
     Return in-memory dataframe ready for weather stage insert.
@@ -27,19 +29,33 @@ def fetch_weather_for_crags_staging(
     client = openmeteo_requests.Client(session=retry_session)
 
     url = "https://api.open-meteo.com/v1/forecast"
-    now_hour = pd.Timestamp.utcnow().floor("h")
     frames: list[pd.DataFrame] = []
 
     for crag_id, lat, lon in crags:
-        params = {
-            "latitude": float(lat),
-            "longitude": float(lon),
-            "timezone": "UTC",
-            # ✅ correct Open-Meteo hourly variable names
-            "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation", "windspeed_10m"],
-            "windspeed_unit": "ms",
-            "precipitation_unit": "mm",
-        }
+        if target_hour_utc is not None:
+            day = target_hour_utc.date()
+            params = {
+                "latitude": float(lat),
+                "longitude": float(lon),
+                "timezone": "UTC",
+                "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation", "windspeed_10m"],
+                "windspeed_unit": "ms",
+                "precipitation_unit": "mm",
+                "start_date": str(day),
+                "end_date": str(day),
+            }
+        else:
+            params = {
+                "latitude": float(lat),
+                "longitude": float(lon),
+                "timezone": "UTC",
+                "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation", "windspeed_10m"],
+                "windspeed_unit": "ms",
+                "precipitation_unit": "mm",
+                "past_days": 1,
+                "forecast_days": 2,
+            }
+
         try:
             resp = client.weather_api(url, params=params)[0]
             hourly = resp.Hourly()
@@ -51,17 +67,18 @@ def fetch_weather_for_crags_staging(
                 inclusive="left",
             )
 
-            # Build df directly from the ordered variables requested above
             df = pd.DataFrame({
                 "date": idx,
                 "temperature_c": hourly.Variables(0).ValuesAsNumpy(),
                 "relative_humidity_percentage": hourly.Variables(1).ValuesAsNumpy(),
                 "precipitation_mm": hourly.Variables(2).ValuesAsNumpy(),
-                "windspeed_ms": hourly.Variables(3).ValuesAsNumpy(),  # ✅ canonical name
+                "windspeed_ms": hourly.Variables(3).ValuesAsNumpy(),
             })
 
-            # keep only current & future hours
-            df = df[df["date"] >= now_hour].copy()
+            if target_hour_utc is not None:
+                hour = target_hour_utc.replace(minute=0, second=0, microsecond=0)
+                df = df[(df["date"] >= hour) & (df["date"] < hour + timedelta(hours=1))]
+
 
             # attach ids/coords/batch
             df["crag_id"] = crag_id
@@ -81,7 +98,7 @@ def fetch_weather_for_crags_staging(
 
             frames.append(df[[
                 "date","precipitation_mm","temperature_c","relative_humidity_percentage",
-                "windspeed_ms","crag_id","longitude","latitude","load_batch_id"  # ✅ no typo
+                "windspeed_ms","crag_id","longitude","latitude","load_batch_id"  
             ]])
 
         except Exception as e:
