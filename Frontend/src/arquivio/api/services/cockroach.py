@@ -213,6 +213,7 @@ class CragDatabase:
                 "OR c.climbing_style ILIKE '%' || :q || '%')"
             )
             params["q"] = query
+            logging.getLogger("api.db").warning("DB search_crags q=%r", query)
 
         def _add_in(col: str, values: list[str] | None, key: str):
             """Append IN/unknown conditions for a single filter column.

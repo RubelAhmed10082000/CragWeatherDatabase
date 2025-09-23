@@ -13,6 +13,7 @@ def get_json(path: str, params: dict | None = None) -> dict:
     Normalize *any* failure into RequestException for the caller.
     """
     url = api_url(path)
+    current_app.logger.warning("WEB GET %s params=%r", url, params)
     connect_t = float(os.getenv("HTTP_CONNECT_TIMEOUT", current_app.config.get("HTTP_CONNECT_TIMEOUT", 2)))
     read_t    = float(os.getenv("HTTP_READ_TIMEOUT",    current_app.config.get("HTTP_READ_TIMEOUT",    8)))
     try:
@@ -77,6 +78,7 @@ def crags_page():
     if styles_sel: params["style"] = styles_sel           
 
     try:
+        current_app.logger.warning("WEB→API /api/crags %r", params)
         data = get_json("api/crags", params=params)
     except RequestException:
         current_app.logger.exception("crags fetch failed")

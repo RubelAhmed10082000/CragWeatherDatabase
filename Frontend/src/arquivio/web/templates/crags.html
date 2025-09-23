@@ -712,14 +712,15 @@
                         <div class="filter-tags" id="activeFilters"></div>
                         <input
                         type="text"
-                        name="q"                              
+                        name="q"
+                        form="searchForm"                              
                         value="{{ search_query or '' }}"
                         placeholder="Search for crags by name..."
                         aria-label="Search crags">
                     </div>
                     </div>
                     
-                    <button type="submit">Apply Filters</button>
+                    <button type="submit" form="searchForm">Apply Filters</button>
                 </div>
 
             <div class="filter-row">
@@ -875,8 +876,8 @@
                                 Routes
                             </div>
                         </th>
-                        <th>Weather (Current Hour)</th>
-                        <th>Last Rained</th>
+                        <th>Weather</th>
+                        <th>Last Rained (Current Hour)</th>
                     </tr>
                 </thead>
                 <tbody>

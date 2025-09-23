@@ -1,5 +1,9 @@
 from typing import Optional, List, Dict
 import pandas as pd
+import logging
+
+
+log = logging.getLogger("api.core")
 
 def list_crags_core(
     *,
@@ -45,6 +49,7 @@ def list_crags_core(
         "climbing_style": styles or None,
     }
     df: pd.DataFrame = db.search_crags(query=q, filters=filters)
+    log.warning("CORE list_crags_core q=%r filters=%r", q, filters)
 
     if df is None or df.empty:
         return {"items": [], "total": 0, "page": page, "per_page": per_page}

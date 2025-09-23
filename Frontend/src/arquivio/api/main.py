@@ -208,6 +208,7 @@ def list_crags(
     sort_order: str = "asc",
 ):
     styles = (style or []) + (climbing_style or []) or None
+    log.warning("API /api/crags q=%r county=%r rocktype=%r styles=%r", q, county, rocktype, styles) 
     return list_crags_core(
         q=q,
         county=county,
