@@ -31,6 +31,8 @@ import time
 from fastapi import Request
 from fastapi.responses import Response
 from arquivio.core.crags import list_crags_core
+from datetime import datetime, timedelta, timezone
+import pandas as pd
 
 
 @asynccontextmanager
@@ -147,6 +149,10 @@ if origins:
     )
 
 _FORECAST_CACHE: dict[tuple[str, int, str], dict[str, object]] = {}
+
+def next_utc_hour(dt: datetime | None = None) -> datetime:
+    now = dt or datetime.now(timezone.utc)
+    return now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
 def _ttl_get(key, ttl_s: int, loader):
     now = monotonic()
@@ -365,11 +371,13 @@ def get_forecast(
 
     ttl_s = int(os.getenv("FORECAST_TTL_S", "600"))
     buster = os.getenv("FORECAST_CACHE_BUSTER", "")
+    cutoff = next_utc_hour()
+    hour_stamp = cutoff.strftime("%Y%m%d%H")
     key = (str(crag_id), int(hours), buster)
 
     def load():
         try:
-            df = db.get_forecast(crag_id, hours=hours)
+            df = db.get_forecast(crag_id, hours=hours + 1)
         except DataError:
             raise HTTPException(status_code=404, detail="No forecast for this crag")
         except SQLAlchemyError as e:
@@ -377,9 +385,21 @@ def get_forecast(
 
         if df is None or getattr(df, "empty", False):
             raise HTTPException(status_code=404, detail="No forecast for this crag")
+
+        try:
+            df = df[df["date"] >= cutoff].sort_values("date").head(hours)
+        except Exception:
+            df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
+            df = df[df["date"] >= cutoff].sort_values("date").head(hours)
+            
+        if getattr(df, "empty", False):
+            raise HTTPException(status_code=404, detail="No forecast for this crag")
+
         return df.to_dict(orient="records")
 
     val = _ttl_get(key, ttl_s, load)
+    if response is not None:
+        response.headers["x-forecast-start-utc"] = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
     log.info(
         "forecast crag=%s hours=%s rows=%s cache=%s",
         crag_id, hours, len(val), "hit" if key in _FORECAST_CACHE else "miss"
