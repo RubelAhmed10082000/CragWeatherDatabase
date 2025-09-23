@@ -875,7 +875,7 @@
                                 Routes
                             </div>
                         </th>
-                        <th>Weather</th>
+                        <th>Weather (Current Hour)</th>
                         <th>Last Rained</th>
                     </tr>
                 </thead>
@@ -1250,7 +1250,6 @@ async function getJSON(path, init) {
   }
   window.gotoPage = gotoPage;
 
-  /** Convenience clearers used by chips & UI. */
   function clearOne(name, value) {
     const sel = `.multi-select input[name="${name}"][value="${CSS.escape(value)}"]`;
     document.querySelectorAll(sel).forEach(el => el.checked = false);
@@ -1615,6 +1614,7 @@ async function getJSON(path, init) {
         btn.classList.toggle('active', nowActive);
         btn.setAttribute('aria-pressed', String(nowActive));
         renderChips();
+        applyCurrentFilters();
       });
     }
 
@@ -1638,6 +1638,7 @@ async function getJSON(path, init) {
         if (lo > MINV || hi < MAXV) tempBox?.classList.add('active');
         else tempBox?.classList.remove('active');
         renderChips();
+        applyCurrentFilters(); 
       }
 
       // Ensure the thumb you grab is the one that moves (z-index hack).
@@ -1677,7 +1678,7 @@ async function getJSON(path, init) {
       const params = new URLSearchParams(location.search);
       const hasAny = params.has('wxf_window') || params.get('wxf_dry') === '1' ||
                      params.get('wxf_low') === '1' || params.get('wxf_temp_on') === '1';
-      if (!hasAny) { renderChips(); return; }
+      if (!hasAny) { renderChips(); applyCurrentFilters(); return; }
 
       if (windowSel && params.get('wxf_window')){
         windowSel.value = params.get('wxf_window');
