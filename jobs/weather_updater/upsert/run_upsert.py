@@ -46,9 +46,9 @@ print({
 
 
 now_utc   = datetime.now(timezone.utc)
-_wend     = now_utc - timedelta(minutes=max(0, WINDOW_SAFETY_MIN))   
-win_end   = _wend.replace(minute=0, second=0, microsecond=0)         
-win_start = win_end - timedelta(hours=max(1, WINDOW_HOURS))         
+safe_now  = now_utc - timedelta(minutes=max(0, WINDOW_SAFETY_MIN))
+win_start = safe_now.replace(minute=0, second=0, microsecond=0)             
+win_end   = win_start + timedelta(hours=max(1, WINDOW_HOURS))        
 
 print({
     "event": "window",
@@ -164,11 +164,12 @@ def main():
         df_all = pd.concat(frames, ignore_index=True)
 
         print({
-        "event": "window_quality",
-        "rows": int(len(df_all)),
-        "unique_hours": int(df_all["date"].nunique()),
-        "min_ts": str(df_all["date"].min()),
-        "max_ts": str(df_all["date"].max())
+        "event": "post_filter",
+        "start": win_start.isoformat(),
+        "end": win_end.isoformat(),
+        "rows_in_window": int(len(df_all)),
+        "min_ts_in": str(df_all["date"].min() if not df_all.empty else None),
+        "max_ts_in": str(df_all["date"].max() if not df_all.empty else None)
         })
 
         if df_all.empty:
@@ -193,6 +194,8 @@ def main():
             safety_min=WINDOW_SAFETY_MIN,
             chunk_size=DEL_CHUNK_SIZE,
             sleep_seconds=DEL_CHUNK_SLEEP_S,
+            start_ts=win_start,
+            end_ts=win_end,
         )
         upserted = res.get("upserted", 0)
         deleted_in_staging= res.get("staging_deleted", 0)

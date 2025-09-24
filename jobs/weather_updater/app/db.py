@@ -534,8 +534,10 @@ def upsert_from_staging(
     hours: int,
     *,
     safety_min: int = WINDOW_SAFETY_MIN,
-    chunk_size: int = 5000,       # staging ~50k → 5k chunks is a good default
-    sleep_seconds: float = 0.02,  # tiny pause to smooth RU
+    chunk_size: int = 5000,       
+    sleep_seconds: float = 0.02, 
+    start_ts: datetime | None = None,
+    end_ts: datetime | None = None
 ) -> dict:
     """
     Single-source-of-truth UPSERT:
@@ -549,9 +551,11 @@ def upsert_from_staging(
         return {'window_start': None, 'window_end': None, 'upserted': 0, 'staging_deleted': 0}
 
     now_utc = datetime.now(timezone.utc)
-    end = _hour_floor(now_utc - timedelta(minutes=max(0, safety_min)))
-    start = end - timedelta(hours=max(1, hours) - 1)
-    run_ts = _hour_floor(now_utc)  # forecast_run_ts basis
+    default_end   = _hour_floor(now_utc - timedelta(minutes=max(0, safety_min)))
+    default_start = default_end - timedelta(hours=max(1, hours) - 1)
+    start = start_ts or default_start
+    end   = end_ts   or default_end
+    run_ts = _hour_floor(now_utc)  
 
     effective_keys_cte = """
     WITH effective_keys AS (
@@ -596,7 +600,7 @@ def upsert_from_staging(
         )
         RETURNING 1;
         """
-        params = {"b": load_batch_id, "start_ts": start, "end_ts": end + timedelta(hours=1), "run_ts": run_ts}
+        params = {"b": load_batch_id, "start_ts": start, "end_ts": end, "run_ts": run_ts}
         cur.execute(upsert_sql, params)
         upserted = cur.rowcount or 0
 
