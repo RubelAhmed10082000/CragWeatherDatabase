@@ -161,6 +161,6 @@ def weather_proxy_latlon(lat: str, lon: str):
     try:
         data = get_json(f"api/weather/{lat}/{lon}", params={"hours": hours})
         return jsonify(data)
-    except RequestException:
+    except RequestException as e:
         current_app.logger.exception("weather latlon proxy failed")
-        return jsonify([]), 200
+        return jsonify({"error": "weather_unavailable"}), 502

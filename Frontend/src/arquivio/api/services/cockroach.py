@@ -312,10 +312,7 @@ class CragDatabase:
             DataFrame with timestamp, temp, humidity, precip, wind.
             Empty DataFrame if no facts exist for `crag_id`.
         """
-        latest = self._get_latest_ts(crag_id)
-        if not latest:
-            return self._df([])
-        start = latest - timedelta(hours=hours - 1)
+        start, end = self._forecast_window_utc(hours)
 
         sql = text(f"""
             SELECT
@@ -326,20 +323,21 @@ class CragDatabase:
                 windspeed_ms AS wind
             FROM {self.T_FACT}
             WHERE crag_id = CAST(:crag_id AS UUID)
-                AND date >= :start_ts AND date <= :end_ts
+                AND date >= :start_ts AND date < :end_ts
             ORDER BY date ASC
         """)
         with self.engine.connect() as c:
             rows = [
                 dict(r._mapping)
-                for r in c.execute(sql, {"crag_id": crag_id, "start_ts": start, "end_ts": latest})
+                for r in c.execute(sql, {"crag_id": crag_id, "start_ts": start, "end_ts": end})
             ]
         return self._df(rows)
 
-    def _now_utc_floor_hour(self) -> datetime:
-        """Current UTC time floored to the top of the hour."""
-        now = datetime.now(UTC)
-        return now.replace(minute=0, second=0, microsecond=0)
+    def _forecast_window_utc(self, hours: int) -> tuple[datetime, datetime]:
+        """[start, end) aligned to the current UTC hour."""
+        start = self._now_utc_floor_hour()
+        end = start + timedelta(hours=hours)
+        return start, end
 
     def _get_latest_ts(self, crag_id: str):
         """Return the latest weather fact timestamp for the given crag.
@@ -366,11 +364,7 @@ class CragDatabase:
             Dict with keys: timestamp, temp, humidity, precip, wind; or None.
         """
 
-        latest = self._get_latest_ts(crag_id)
-        if not latest:
-            return None
-
-        start = latest - timedelta(hours=hours - 1)
+        start, _ = self._forecast_window_utc(hours)
 
         sql = text(f"""
             SELECT
@@ -381,14 +375,13 @@ class CragDatabase:
             windspeed_ms AS wind
             FROM {self.T_FACT}
             WHERE crag_id = CAST(:crag_id AS UUID)  
-            AND date >= :start_ts 
-            AND date <= :end_ts
+            AND date >= :start_ts
             ORDER BY date ASC
             LIMIT 1
         """)
         with self.engine.connect() as c:
             row = (
-                c.execute(sql, {"crag_id": crag_id, "start_ts": start, "end_ts": latest})
+                c.execute(sql, {"crag_id": crag_id, "start_ts": start})
                 .mappings()
                 .first()
             )
