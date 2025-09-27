@@ -4,11 +4,12 @@
 
 Cloud‑native platform mapping every UK rock‑climbing crag to 7‑day hourly forecasts for fast, accurate trip planning.
 
-**Status (05 Sep 2025)**: 
+**Status (27 Sep 2025)**: 
 
-• ~4,000 UK crags 
-• FastAPI read‑only API in progress 
-• frontend next
+• Frontend and API completed
+• Working on stabilising the database
+• Restructuring project file directory
+• CI/CD and monitoring
 
 ***TLDR**
 
