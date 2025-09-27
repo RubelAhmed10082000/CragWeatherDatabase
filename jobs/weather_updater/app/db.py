@@ -534,8 +534,10 @@ def upsert_from_staging(
     hours: int,
     *,
     safety_min: int = WINDOW_SAFETY_MIN,
-    chunk_size: int = 5000,       # staging ~50k → 5k chunks is a good default
-    sleep_seconds: float = 0.02,  # tiny pause to smooth RU
+    chunk_size: int = 5000,       
+    sleep_seconds: float = 0.02, 
+    start_ts: datetime | None = None,
+    end_ts: datetime | None = None
 ) -> dict:
     """
     Single-source-of-truth UPSERT:
@@ -549,9 +551,18 @@ def upsert_from_staging(
         return {'window_start': None, 'window_end': None, 'upserted': 0, 'staging_deleted': 0}
 
     now_utc = datetime.now(timezone.utc)
-    end = _hour_floor(now_utc - timedelta(minutes=max(0, safety_min)))
-    start = end - timedelta(hours=max(1, hours) - 1)
-    run_ts = _hour_floor(now_utc)  # forecast_run_ts basis
+    eff_hours = max(1, int(hours))
+    next_hour_utc = (now_utc + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    default_start = next_hour_utc
+    default_end   = default_start + timedelta(hours=eff_hours)
+    start = start_ts or default_start
+    end   = end_ts   or default_end
+    run_ts = _hour_floor(now_utc)  
+
+    if end <= start:
+        raise ValueError(f"end_ts ({end}) must be greater than start_ts ({start})")
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("start_ts and end_ts must be tz-aware (UTC)")
 
     effective_keys_cte = """
     WITH effective_keys AS (
@@ -562,6 +573,19 @@ def upsert_from_staging(
         AND s.date <  %(end_ts)s
     )
     """
+
+    print({"event":"db.preflight","batch": load_batch_id,
+       "start": start.isoformat(), "end": end.isoformat()})
+    
+    cur.execute("""
+    SELECT COUNT(*) 
+    FROM public.stg_weather_route
+    WHERE load_batch_id = %(b)s AND date >= %(start_ts)s AND date < %(end_ts)s
+""", {"b": load_batch_id, "start_ts": start, "end_ts": end})
+    
+    pre_count = cur.fetchone()[0]
+    
+    print({"event":"db.preflight.count","count": int(pre_count)})
 
     with get_connection() as conn, conn.cursor() as cur:
         # 1) UPSERT change-only
@@ -596,11 +620,10 @@ def upsert_from_staging(
         )
         RETURNING 1;
         """
-        params = {"b": load_batch_id, "start_ts": start, "end_ts": end + timedelta(hours=1), "run_ts": run_ts}
+        params = {"b": load_batch_id, "start_ts": start, "end_ts": end, "run_ts": run_ts}
         cur.execute(upsert_sql, params)
         upserted = cur.rowcount or 0
 
-        # 2) Chunked cleanup (same transaction)
         staged_deleted = 0
         while True:
             n = _delete_staging_chunk_in_tx(cur, load_batch_id, chunk_size)

@@ -673,7 +673,7 @@ async function getJSON(path, init) {
     ? path
     : `${(API_BASE || '').replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 
-  const res = await fetch(url, { credentials: 'same-origin', ...init });
+  const res = await fetch(url, { credentials: 'same-origin', ...(init || {}) });
   if (!res.ok) {
     let body = ''; try { body = await res.text(); } catch {}
     throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url} :: ${body}`);

@@ -876,8 +876,7 @@
                                 Routes
                             </div>
                         </th>
-                        <th>Weather</th>
-                        <th>Last Rained (Current Hour)</th>
+                        <th>Weather (Current Hour)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -910,11 +909,6 @@
                                     <span class="weather-loading">Loading weather data...</span>
                                 {% endif %}
                             </div>
-                        </td>
-                        <td class="last-rained">
-                        {% if crag.last_rained_ts %}
-                            {{ crag.last_rained_ts | timeago }}{% if crag.last_rain_severity %} ({{ crag.last_rain_severity|title }}){% endif %}
-                        {% else %}—{% endif %}
                         </td>
                     </tr>
                     {% endfor %}

@@ -31,9 +31,7 @@ import time
 from fastapi import Request
 from fastapi.responses import Response
 from arquivio.core.crags import list_crags_core
-from datetime import datetime, timedelta, timezone
-import pandas as pd
-
+from arquivio.api.services.cockroach import db, DatabaseError 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -382,7 +380,8 @@ def get_forecast(
             raise HTTPException(status_code=404, detail="No forecast for this crag")
         except SQLAlchemyError as e:
             raise HTTPException(status_code=503, detail=f"Database error: {e.__class__.__name__}")
-
+        except DatabaseError as e:  
+            raise HTTPException(status_code=503, detail=str(e))
         if df is None or getattr(df, "empty", False):
             raise HTTPException(status_code=404, detail="No forecast for this crag")
 
