@@ -42,4 +42,5 @@ jobs_*
 
 cockroach-ca.crt
 .vscode
+repo-tree.txt
 
