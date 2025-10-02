@@ -32,6 +32,8 @@ from fastapi import Request
 from fastapi.responses import Response
 from arquivio.core.crags import list_crags_core
 from arquivio.api.services.cockroach import db, DatabaseError 
+import pandas as pd
+from datetime import datetime, timezone, timedelta
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
