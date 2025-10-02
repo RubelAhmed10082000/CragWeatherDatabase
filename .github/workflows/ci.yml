@@ -12,6 +12,7 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/Frontend/src
+      API_BASE: https://crag-api-staging-898934496030.europe-west2.run.app
     steps:
       - uses: actions/checkout@v4
 
