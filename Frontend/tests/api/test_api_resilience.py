@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from starlette.testclient import TestClient
 
-from frontend.src.arquivio.api import main as api_main
+from src.arquivio.api import main as api_main
 
 os.environ.setdefault("SANITY_MODE", "1")
 
@@ -97,7 +97,7 @@ def test_list_crags_empty(monkeypatch, client):
 def test_list_crags_filters_merging(monkeypatch, client):
     from types import SimpleNamespace
 
-    from frontend.src.arquivio.api import main as api_main
+    from src.arquivio.api import main as api_main
 
     captured = {"query": None, "filters": None}
 
@@ -162,7 +162,7 @@ def test_crag_detail_success_and_routes(monkeypatch, client):
 def test_forecast_by_crag_ok_and_404(monkeypatch, client):
     from types import SimpleNamespace
 
-    from frontend.src.arquivio.api import main as api_main
+    from src.arquivio.api import main as api_main
 
     route = next(
         r
